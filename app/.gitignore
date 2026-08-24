@@ -1,0 +1,27 @@
+node_modules
+dist
+dist-web
+out
+.xwin-cache/
+release/
+.DS_Store
+.eslintcache
+*.log*
+*.tsbuildinfo
+*.local
+*.tmp
+*.bak
+
+# Native / Rust
+native/target/
+src-tauri/target/
+*.node
+
+# electron-builder leftovers
+*.dmg
+*.blockmap
+*.AppImage
+latest.yml
+latest-mac.yml
+builder-effective-config.yaml
+builder-debug.yml
