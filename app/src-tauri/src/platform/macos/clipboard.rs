@@ -565,7 +565,7 @@ fn read_data(
 
 #[cfg(target_os = "macos")]
 fn read_file_urls(pasteboard: &NSPasteboard, types: &[String]) -> Option<Vec<String>> {
-    if !has_type(types, NSPasteboardTypeFileURL) {
+    if !has_type(types, unsafe { NSPasteboardTypeFileURL }) {
         return None;
     }
     let file_urls = pasteboard
@@ -575,7 +575,7 @@ fn read_file_urls(pasteboard: &NSPasteboard, types: &[String]) -> Option<Vec<Str
                 .to_vec()
                 .into_iter()
                 .filter_map(|item: objc2::rc::Retained<NSPasteboardItem>| {
-                    item.stringForType(NSPasteboardTypeFileURL)
+                    item.stringForType(unsafe { NSPasteboardTypeFileURL })
                         .map(|value| value.to_string())
                 })
                 .collect()
