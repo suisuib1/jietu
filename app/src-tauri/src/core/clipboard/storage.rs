@@ -1,6 +1,6 @@
 use std::{error::Error, fmt, io, time::Duration};
 
-use super::{ClipboardInput, ClipboardItem, PrivacyRejection};
+use super::{ClipboardImagePreview, ClipboardInput, ClipboardItem, PrivacyRejection};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RecordOutcome {
@@ -70,8 +70,29 @@ impl From<io::Error> for StorageError {
 pub(crate) trait ClipboardStorage: Send + Sync {
     fn record(&self, input: ClipboardInput, now_ms: i64) -> Result<RecordOutcome, StorageError>;
     fn get(&self, id: i64) -> Result<Option<ClipboardItem>, StorageError>;
-    fn list(&self, limit: usize) -> Result<Vec<ClipboardItem>, StorageError>;
-    fn search(&self, query: &str, limit: usize) -> Result<Vec<ClipboardItem>, StorageError>;
+    fn list_page(&self, offset: usize, limit: usize) -> Result<Vec<ClipboardItem>, StorageError>;
+    fn search_page(
+        &self,
+        query: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ClipboardItem>, StorageError>;
+    fn count(&self, query: Option<&str>) -> Result<usize, StorageError>;
+    fn delete(&self, id: i64) -> Result<bool, StorageError>;
     fn set_favorite(&self, id: i64, favorite: bool) -> Result<bool, StorageError>;
+    fn image_preview(
+        &self,
+        id: i64,
+        max_width: u32,
+        max_height: u32,
+    ) -> Result<Option<ClipboardImagePreview>, StorageError>;
     fn enforce_retention(&self, now_ms: i64) -> Result<RetentionResult, StorageError>;
+
+    fn list(&self, limit: usize) -> Result<Vec<ClipboardItem>, StorageError> {
+        self.list_page(0, limit)
+    }
+
+    fn search(&self, query: &str, limit: usize) -> Result<Vec<ClipboardItem>, StorageError> {
+        self.search_page(query, 0, limit)
+    }
 }

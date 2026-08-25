@@ -26,6 +26,11 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use directories::BaseDirs;
 use image::RgbaImage;
 use runtime::clipboard::ClipboardRuntimeState;
+use runtime::clipboard_history::{
+    clipboard_history_count, clipboard_history_delete, clipboard_history_get,
+    clipboard_history_image_preview, clipboard_history_list, clipboard_history_search,
+    clipboard_history_set_favorite,
+};
 use screenshots::Screen;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
@@ -37,10 +42,15 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 const DEFAULT_SHORTCUT_MAC: &str = "Alt+A";
 const DEFAULT_SHORTCUT_WINDOWS: &str = "Control+Shift+A";
+const HISTORY_SHORTCUT: &str = "Alt+V";
+const HISTORY_WINDOW_LABEL: &str = "clipboard-history";
+const HISTORY_WINDOW_WIDTH: f64 = 820.0;
+const HISTORY_WINDOW_HEIGHT: f64 = 540.0;
+const HISTORY_SHORTCUT_DEBOUNCE: Duration = Duration::from_millis(150);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +103,7 @@ struct AppState {
     pin_data: Mutex<Option<Vec<u8>>>,
     registered_shortcut: Mutex<Option<String>>,
     shortcut_suspended: AtomicBool,
+    history_shortcut_last_trigger: Mutex<Option<Instant>>,
     scroll_rect: Mutex<Option<Rect>>,
     scroll_pipeline: Mutex<Option<ScrollPipeline>>,
     scroll_generation: AtomicU64,
@@ -501,6 +512,141 @@ fn prewarm_overlay(app: &AppHandle) {
             eprintln!("Unable to prewarm capture overlay: {error}");
         }
     }
+}
+
+fn build_clipboard_history_window(app: &AppHandle) -> Result<(), String> {
+    let window = WebviewWindowBuilder::new(
+        app,
+        HISTORY_WINDOW_LABEL,
+        WebviewUrl::App("index.html?view=clipboard-history".into()),
+    )
+    .title("Clipboard History")
+    .inner_size(HISTORY_WINDOW_WIDTH, HISTORY_WINDOW_HEIGHT)
+    .min_inner_size(640.0, 420.0)
+    .decorations(false)
+    .transparent(true)
+    .shadow(true)
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false)
+    .build()
+    .map_err(|error| error.to_string())?;
+    let blur_window = window.clone();
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Focused(false) => {
+            let _ = blur_window.hide();
+            let _ = blur_window.emit("clipboard-history-window-hidden", ());
+        }
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            let _ = blur_window.hide();
+            let _ = blur_window.emit("clipboard-history-window-hidden", ());
+        }
+        _ => {}
+    });
+    Ok(())
+}
+
+fn prewarm_clipboard_history_window(app: &AppHandle) {
+    if app.get_webview_window(HISTORY_WINDOW_LABEL).is_none() {
+        match build_clipboard_history_window(app) {
+            Ok(()) => eprintln!("Clipboard history window prewarmed"),
+            Err(error) => eprintln!("Unable to prewarm clipboard history window: {error}"),
+        }
+    }
+}
+
+fn position_clipboard_history_window(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(HISTORY_WINDOW_LABEL)
+        .ok_or_else(|| "clipboard history window is unavailable".to_owned())?;
+    let raw_cursor = app.cursor_position().map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    let cursor = {
+        let scale = app
+            .primary_monitor()
+            .ok()
+            .flatten()
+            .map(|monitor| monitor.scale_factor())
+            .unwrap_or(1.0)
+            .max(1.0);
+        (raw_cursor.x / scale, raw_cursor.y / scale)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let cursor = (raw_cursor.x, raw_cursor.y);
+    let monitor = app
+        .monitor_from_point(cursor.0, cursor.1)
+        .ok()
+        .flatten()
+        .or_else(|| app.primary_monitor().ok().flatten())
+        .ok_or_else(|| "no monitor is available".to_owned())?;
+    let scale = monitor.scale_factor().max(1.0);
+    let size = monitor.size();
+    let position = monitor.position();
+    let width = (HISTORY_WINDOW_WIDTH * scale).round() as u32;
+    let height = (HISTORY_WINDOW_HEIGHT * scale).round() as u32;
+    let x = position.x + (i64::from(size.width) - i64::from(width)).max(0) as i32 / 2;
+    let y = position.y + (i64::from(size.height) - i64::from(height)).max(0) as i32 / 2;
+    window
+        .set_size(tauri::PhysicalSize::new(width, height))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_position(tauri::PhysicalPosition::new(x, y))
+        .map_err(|error| error.to_string())
+}
+
+fn hide_clipboard_history_window(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(HISTORY_WINDOW_LABEL)
+        .ok_or_else(|| "clipboard history window is unavailable".to_owned())?;
+    window.hide().map_err(|error| error.to_string())?;
+    let _ = window.emit("clipboard-history-window-hidden", ());
+    Ok(())
+}
+
+fn toggle_clipboard_history_window(app: &AppHandle) -> Result<(), String> {
+    if app.get_webview_window(HISTORY_WINDOW_LABEL).is_none() {
+        build_clipboard_history_window(app)?;
+    }
+    let window = app
+        .get_webview_window(HISTORY_WINDOW_LABEL)
+        .ok_or_else(|| "clipboard history window is unavailable".to_owned())?;
+    if window.is_visible().unwrap_or(false) {
+        return hide_clipboard_history_window(app);
+    }
+    position_clipboard_history_window(app)?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())?;
+    let _ = window.emit("clipboard-history-window-shown", ());
+    Ok(())
+}
+
+fn handle_history_shortcut(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let now = Instant::now();
+    {
+        let mut last = state.history_shortcut_last_trigger.lock().unwrap();
+        if last.is_some_and(|last| now.duration_since(last) < HISTORY_SHORTCUT_DEBOUNCE) {
+            return;
+        }
+        *last = Some(now);
+    }
+    if let Err(error) = toggle_clipboard_history_window(app) {
+        eprintln!("Unable to toggle clipboard history window: {error}");
+    }
+}
+
+fn is_history_shortcut(shortcut: &Shortcut) -> bool {
+    HISTORY_SHORTCUT
+        .parse::<Shortcut>()
+        .is_ok_and(|history| history.id() == shortcut.id())
+}
+
+fn register_history_shortcut(app: &AppHandle) -> Result<(), String> {
+    app.global_shortcut()
+        .register(HISTORY_SHORTCUT)
+        .map_err(|error| error.to_string())
 }
 
 fn build_pin_window(
@@ -1735,6 +1881,11 @@ fn close_shortcut_window(app: AppHandle) {
     resume_shortcut(&app);
 }
 
+#[tauri::command]
+fn hide_clipboard_history(app: AppHandle) -> Result<(), String> {
+    hide_clipboard_history_window(&app)
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
@@ -1743,9 +1894,13 @@ pub fn run() {
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        handle_start_capture(app);
+                        if is_history_shortcut(shortcut) {
+                            handle_history_shortcut(app);
+                        } else {
+                            handle_start_capture(app);
+                        }
                     }
                 })
                 .build(),
@@ -1756,6 +1911,7 @@ pub fn run() {
             pin_data: Mutex::new(None),
             registered_shortcut: Mutex::new(None),
             shortcut_suspended: AtomicBool::new(false),
+            history_shortcut_last_trigger: Mutex::new(None),
             scroll_rect: Mutex::new(None),
             scroll_pipeline: Mutex::new(None),
             scroll_generation: AtomicU64::new(0),
@@ -1826,6 +1982,7 @@ pub fn run() {
             // Keep a hidden WebView ready so the first shortcut press only has
             // to capture pixels and resize/show the existing native window.
             prewarm_overlay(app.handle());
+            prewarm_clipboard_history_window(app.handle());
             #[cfg(target_os = "windows")]
             {
                 prewarm_scroll_control(app.handle());
@@ -1862,6 +2019,10 @@ pub fn run() {
                     let _ = open_shortcut_window(app.handle());
                 }
             }
+            match register_history_shortcut(app.handle()) {
+                Ok(()) => eprintln!("LiteSnap clipboard history shortcut: {HISTORY_SHORTCUT}"),
+                Err(error) => eprintln!("Clipboard history shortcut unavailable: {error}"),
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1885,6 +2046,14 @@ pub fn run() {
             begin_shortcut_recording,
             end_shortcut_recording,
             close_shortcut_window,
+            hide_clipboard_history,
+            clipboard_history_list,
+            clipboard_history_search,
+            clipboard_history_get,
+            clipboard_history_delete,
+            clipboard_history_set_favorite,
+            clipboard_history_count,
+            clipboard_history_image_preview,
         ])
         .build(tauri::generate_context!())
         .expect("error while building LiteSnap");

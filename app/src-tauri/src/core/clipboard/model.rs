@@ -90,3 +90,10 @@ pub(crate) struct ClipboardItem {
     pub(crate) last_used_at_ms: i64,
     pub(crate) favorite: bool,
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ClipboardImagePreview {
+    pub(crate) png: Vec<u8>,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+}

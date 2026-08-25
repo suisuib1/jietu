@@ -72,5 +72,23 @@ export const zhTW: Messages = {
     cancel: '取消',
     moveHint: '拖曳文字可移動 · 連按兩下可再編輯',
     emojiMoveHint: '拖曳可移動 · 拖曳右下角可調整大小 · Backspace 可刪除'
+  },
+  clipboardHistory: {
+    title: '剪貼簿記錄',
+    searchPlaceholder: '搜尋剪貼簿',
+    emptyTitle: '暫無剪貼簿記錄',
+    emptyDescription: '複製文字、圖片或檔案後會顯示在這裡。',
+    noResults: '找不到符合的內容',
+    unavailable: '剪貼簿記錄暫時無法使用',
+    operationError: '無法載入剪貼簿記錄',
+    imageUnavailable: '圖片無法使用',
+    preview: '預覽',
+    favorite: '加入收藏',
+    unfavorite: '取消收藏',
+    delete: '刪除',
+    text: '文字',
+    html: 'HTML',
+    image: '截圖',
+    files: '檔案'
   }
 }

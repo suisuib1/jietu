@@ -36,6 +36,39 @@ export interface ScrollCaptureResult {
   imageHeight: number
 }
 
+export type ClipboardKind = 'text' | 'html' | 'image' | 'files'
+
+export interface ClipboardHistorySummary {
+  id: number
+  kind: ClipboardKind
+  previewText: string
+  sourceApplication?: string
+  createdAtMs: number
+  lastUsedAtMs: number
+  isFavorite: boolean
+  fileCount: number
+  imageAvailable: boolean
+}
+
+export interface ClipboardHistoryDetail {
+  id: number
+  kind: ClipboardKind
+  textContent?: string
+  htmlContent?: string
+  files: string[]
+  sourceApplication?: string
+  createdAtMs: number
+  lastUsedAtMs: number
+  isFavorite: boolean
+  imageAvailable: boolean
+}
+
+export interface ClipboardHistoryImagePreview {
+  dataBase64: string
+  width: number
+  height: number
+}
+
 export interface Api {
   closeOverlay: () => void
   showCaptureOverlay: () => Promise<boolean>
@@ -61,6 +94,25 @@ export interface Api {
   endShortcutRecording: () => Promise<void>
   closeShortcutWindow: () => void
   onSettingsChanged: (callback: (settings: AppSettings) => void) => () => void
+  hideClipboardHistory: () => Promise<void>
+  clipboardHistoryList: (offset: number, limit: number) => Promise<ClipboardHistorySummary[]>
+  clipboardHistorySearch: (
+    query: string,
+    offset: number,
+    limit: number
+  ) => Promise<ClipboardHistorySummary[]>
+  clipboardHistoryGet: (id: number) => Promise<ClipboardHistoryDetail | null>
+  clipboardHistoryDelete: (id: number) => Promise<boolean>
+  clipboardHistorySetFavorite: (id: number, favorite: boolean) => Promise<boolean>
+  clipboardHistoryCount: (query?: string) => Promise<number>
+  clipboardHistoryImagePreview: (
+    id: number,
+    maxWidth: number,
+    maxHeight: number
+  ) => Promise<ClipboardHistoryImagePreview | null>
+  onClipboardHistoryChanged: (callback: () => void) => () => void
+  onClipboardHistoryWindowShown: (callback: () => void) => () => void
+  onClipboardHistoryWindowHidden: (callback: () => void) => () => void
 }
 
 interface ScrollPreview {
@@ -134,7 +186,23 @@ export const api: Api = {
   beginShortcutRecording: () => invoke('begin_shortcut_recording'),
   endShortcutRecording: () => invoke('end_shortcut_recording'),
   closeShortcutWindow: () => void invoke('close_shortcut_window'),
-  onSettingsChanged: (callback) => subscribe('settings-changed', callback)
+  onSettingsChanged: (callback) => subscribe('settings-changed', callback),
+  hideClipboardHistory: () => invoke('hide_clipboard_history'),
+  clipboardHistoryList: (offset, limit) => invoke('clipboard_history_list', { offset, limit }),
+  clipboardHistorySearch: (query, offset, limit) =>
+    invoke('clipboard_history_search', { query, offset, limit }),
+  clipboardHistoryGet: (id) => invoke('clipboard_history_get', { id }),
+  clipboardHistoryDelete: (id) => invoke('clipboard_history_delete', { id }),
+  clipboardHistorySetFavorite: (id, favorite) =>
+    invoke('clipboard_history_set_favorite', { id, favorite }),
+  clipboardHistoryCount: (query) => invoke('clipboard_history_count', { query: query || null }),
+  clipboardHistoryImagePreview: (id, maxWidth, maxHeight) =>
+    invoke('clipboard_history_image_preview', { id, maxWidth, maxHeight }),
+  onClipboardHistoryChanged: (callback) => subscribe('clipboard-history-changed', callback),
+  onClipboardHistoryWindowShown: (callback) =>
+    subscribe('clipboard-history-window-shown', callback),
+  onClipboardHistoryWindowHidden: (callback) =>
+    subscribe('clipboard-history-window-hidden', callback)
 }
 
 declare global {

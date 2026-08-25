@@ -72,5 +72,23 @@ export const zh: Messages = {
     cancel: '取消',
     moveHint: '拖动文字可移动 · 双击可再编辑',
     emojiMoveHint: '拖动可移动 · 拖动右下角可调整大小 · Backspace 可删除'
+  },
+  clipboardHistory: {
+    title: '剪贴板历史',
+    searchPlaceholder: '搜索剪贴板',
+    emptyTitle: '暂无剪贴板历史',
+    emptyDescription: '复制文字、图片或文件后会显示在这里。',
+    noResults: '未找到匹配内容',
+    unavailable: '剪贴板历史暂不可用',
+    operationError: '无法加载剪贴板历史',
+    imageUnavailable: '图片不可用',
+    preview: '预览',
+    favorite: '收藏',
+    unfavorite: '取消收藏',
+    delete: '删除',
+    text: '文字',
+    html: 'HTML',
+    image: '截图',
+    files: '文件'
   }
 }

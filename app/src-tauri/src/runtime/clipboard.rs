@@ -9,8 +9,8 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::core::clipboard::{
-    ClipboardInput, ClipboardStorage, PrivacyPolicy, RecordOutcome, RetentionPolicy,
-    SqliteClipboardStorage, StorageError,
+    ClipboardHistoryService, ClipboardInput, ClipboardStorage, PrivacyPolicy, RecordOutcome,
+    RetentionPolicy, SqliteClipboardStorage, StorageError,
 };
 
 #[cfg(target_os = "macos")]
@@ -22,7 +22,7 @@ const CLIPBOARD_DIRECTORY: &str = "clipboard";
 const RETENTION_WRITE_INTERVAL: usize = 50;
 const HISTORY_CHANGED_EVENT: &str = "clipboard-history-changed";
 
-type StorageHandle = Arc<dyn ClipboardStorage>;
+pub(crate) type StorageHandle = Arc<dyn ClipboardStorage>;
 type HistoryNotifier = Arc<dyn Fn() + Send + Sync>;
 type RuntimeClock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
@@ -185,6 +185,20 @@ impl ClipboardRuntimeState {
             Some(mut runtime) => runtime.shutdown(),
             None => Ok(()),
         }
+    }
+
+    pub(crate) fn history_service(
+        &self,
+    ) -> Result<Option<ClipboardHistoryService>, ClipboardRuntimeError> {
+        let runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| ClipboardRuntimeError::StatePoisoned)?;
+        Ok(runtime
+            .as_ref()
+            .and_then(|runtime| runtime.storage.as_ref())
+            .map(Arc::clone)
+            .map(ClipboardHistoryService::new))
     }
 }
 
@@ -472,5 +486,11 @@ mod tests {
         assert!(runtime.worker.is_none());
         assert!(runtime.storage.is_none());
         assert_eq!(Arc::strong_count(&storage), 1);
+    }
+
+    #[test]
+    fn runtime_unavailable_has_no_history_service() {
+        let state = ClipboardRuntimeState::default();
+        assert!(state.history_service().unwrap().is_none());
     }
 }

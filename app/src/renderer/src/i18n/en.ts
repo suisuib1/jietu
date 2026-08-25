@@ -71,6 +71,24 @@ export interface Messages {
     moveHint: string
     emojiMoveHint: string
   }
+  clipboardHistory: {
+    title: string
+    searchPlaceholder: string
+    emptyTitle: string
+    emptyDescription: string
+    noResults: string
+    unavailable: string
+    operationError: string
+    imageUnavailable: string
+    preview: string
+    favorite: string
+    unfavorite: string
+    delete: string
+    text: string
+    html: string
+    image: string
+    files: string
+  }
 }
 
 export const en: Messages = {
@@ -145,5 +163,23 @@ export const en: Messages = {
     cancel: 'Cancel',
     moveHint: 'Drag text to move · Double-click to edit',
     emojiMoveHint: 'Drag to move · Drag corner to resize · Backspace to delete'
+  },
+  clipboardHistory: {
+    title: 'Clipboard History',
+    searchPlaceholder: 'Search clipboard',
+    emptyTitle: 'No clipboard history yet',
+    emptyDescription: 'Copied text, images, and files will appear here.',
+    noResults: 'No matching content',
+    unavailable: 'Clipboard history is temporarily unavailable',
+    operationError: 'Clipboard history could not be loaded',
+    imageUnavailable: 'Image unavailable',
+    preview: 'Preview',
+    favorite: 'Add to favorites',
+    unfavorite: 'Remove from favorites',
+    delete: 'Delete',
+    text: 'Text',
+    html: 'HTML',
+    image: 'Screenshot',
+    files: 'Files'
   }
 }

@@ -308,8 +308,8 @@ fn html_files_search_and_favorites_round_trip() {
     assert!(store.set_favorite(html.id, true).unwrap());
     assert!(!store.set_favorite(99_999, true).unwrap());
     let listed = store.list(10).unwrap();
-    assert_eq!(listed[0].id, html.id);
-    assert!(listed[0].favorite);
+    assert_eq!(listed[0].id, files.id);
+    assert!(store.get(html.id).unwrap().unwrap().favorite);
     assert_eq!(store.get(files.id).unwrap(), Some(files));
 }
 
@@ -383,4 +383,153 @@ fn storage_serializes_concurrent_deduplication() {
         1
     );
     assert_eq!(store.list(20).unwrap().len(), 1);
+}
+
+#[test]
+fn list_pagination_uses_recent_order_without_loading_all_items() {
+    let directory = TestDirectory::new("list-pagination");
+    let store = storage(
+        &directory,
+        PrivacyPolicy::default(),
+        RetentionPolicy::default(),
+    );
+    let first = inserted(store.record(text("first", None), 10).unwrap());
+    let second = inserted(store.record(text("second", None), 20).unwrap());
+    let third = inserted(store.record(text("third", None), 30).unwrap());
+
+    assert_eq!(
+        store
+            .list_page(0, 2)
+            .unwrap()
+            .into_iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![third.id, second.id]
+    );
+    assert_eq!(store.list_page(2, 2).unwrap()[0].id, first.id);
+    assert_eq!(store.count(None).unwrap(), 3);
+}
+
+#[test]
+fn search_pagination_and_count_share_the_same_filter() {
+    let directory = TestDirectory::new("search-pagination");
+    let store = storage(
+        &directory,
+        PrivacyPolicy::default(),
+        RetentionPolicy::default(),
+    );
+    for (value, timestamp) in [("match one", 10), ("other", 20), ("match two", 30)] {
+        store.record(text(value, None), timestamp).unwrap();
+    }
+
+    assert_eq!(store.count(Some("match")).unwrap(), 2);
+    let first_page = store.search_page("match", 0, 1).unwrap();
+    let second_page = store.search_page("match", 1, 1).unwrap();
+    assert_eq!(first_page[0].text_content.as_deref(), Some("match two"));
+    assert_eq!(second_page[0].text_content.as_deref(), Some("match one"));
+}
+
+#[test]
+fn delete_removes_database_row_and_managed_image() {
+    let directory = TestDirectory::new("delete-image");
+    let store = storage(
+        &directory,
+        PrivacyPolicy::default(),
+        RetentionPolicy::default(),
+    );
+    let item = inserted(
+        store
+            .record(
+                ClipboardInput::Image {
+                    width: 1,
+                    height: 1,
+                    rgba8: vec![1, 2, 3, 255],
+                    source_app: None,
+                },
+                10,
+            )
+            .unwrap(),
+    );
+    let image_path = item.image_path.unwrap();
+
+    assert!(store.delete(item.id).unwrap());
+    assert!(!store.delete(item.id).unwrap());
+    assert!(store.get(item.id).unwrap().is_none());
+    assert!(!image_path.exists());
+}
+
+#[test]
+fn image_preview_rejects_unsafe_managed_path() {
+    let directory = TestDirectory::new("unsafe-preview");
+    let store = storage(
+        &directory,
+        PrivacyPolicy::default(),
+        RetentionPolicy::default(),
+    );
+    let item = inserted(
+        store
+            .record(
+                ClipboardInput::Image {
+                    width: 1,
+                    height: 1,
+                    rgba8: vec![1, 2, 3, 255],
+                    source_app: None,
+                },
+                10,
+            )
+            .unwrap(),
+    );
+    let connection = Connection::open(store.database_path()).unwrap();
+    connection
+        .execute(
+            "UPDATE clipboard_items SET image_file = '../../outside.png' WHERE id = ?1",
+            [item.id],
+        )
+        .unwrap();
+
+    assert!(store.image_preview(item.id, 100, 100).is_err());
+}
+
+#[test]
+fn image_preview_resizes_with_aspect_ratio() {
+    let directory = TestDirectory::new("resize-preview");
+    let store = storage(
+        &directory,
+        PrivacyPolicy::default(),
+        RetentionPolicy::default(),
+    );
+    let item = inserted(
+        store
+            .record(
+                ClipboardInput::Image {
+                    width: 400,
+                    height: 200,
+                    rgba8: vec![127; 400 * 200 * 4],
+                    source_app: None,
+                },
+                10,
+            )
+            .unwrap(),
+    );
+
+    let preview = store.image_preview(item.id, 100, 100).unwrap().unwrap();
+    assert_eq!((preview.width, preview.height), (100, 50));
+    let decoded = image::load_from_memory(&preview.png).unwrap().into_rgba8();
+    assert_eq!(decoded.dimensions(), (100, 50));
+}
+
+#[test]
+fn non_image_preview_request_is_rejected() {
+    let directory = TestDirectory::new("non-image-preview");
+    let store = storage(
+        &directory,
+        PrivacyPolicy::default(),
+        RetentionPolicy::default(),
+    );
+    let item = inserted(store.record(text("not an image", None), 10).unwrap());
+
+    assert!(matches!(
+        store.image_preview(item.id, 100, 100),
+        Err(StorageError::InvalidData(_))
+    ));
 }

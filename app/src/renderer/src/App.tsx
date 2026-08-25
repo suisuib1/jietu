@@ -3,6 +3,7 @@ import ScreenshotOverlay from './components/ScreenshotOverlay'
 import ShortcutPanel from './components/ShortcutPanel'
 import ScrollCaptureControl from './components/ScrollCaptureControl'
 import PinImage from './components/PinImage'
+import ClipboardHistory from './components/ClipboardHistory'
 import { getMessages, I18nContext, type Language } from './i18n'
 
 function App(): React.JSX.Element {
@@ -23,6 +24,7 @@ function App(): React.JSX.Element {
   if (hash === 'shortcut') content = <ShortcutPanel />
   else if (hash === 'scroll-capture') content = <ScrollCaptureControl />
   else if (hash === 'pin') content = <PinImage />
+  else if (hash === 'clipboard-history') content = <ClipboardHistory />
   else content = <ScreenshotOverlay />
 
   return (

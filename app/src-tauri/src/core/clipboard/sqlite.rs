@@ -11,8 +11,8 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params, types::T
 use crate::core::image::png_bytes;
 
 use super::{
-    ClipboardInput, ClipboardItem, ClipboardKind, ClipboardStorage, PrivacyPolicy, RecordOutcome,
-    RetentionPolicy, RetentionResult, StorageError, content_hash,
+    ClipboardImagePreview, ClipboardInput, ClipboardItem, ClipboardKind, ClipboardStorage,
+    PrivacyPolicy, RecordOutcome, RetentionPolicy, RetentionResult, StorageError, content_hash,
 };
 
 const SCHEMA_VERSION: i64 = 1;
@@ -233,7 +233,7 @@ impl ClipboardStorage for SqliteClipboardStorage {
             .map_err(StorageError::from)
     }
 
-    fn list(&self, limit: usize) -> Result<Vec<ClipboardItem>, StorageError> {
+    fn list_page(&self, offset: usize, limit: usize) -> Result<Vec<ClipboardItem>, StorageError> {
         if limit == 0 {
             return Ok(Vec::new());
         }
@@ -242,16 +242,21 @@ impl ClipboardStorage for SqliteClipboardStorage {
             &connection,
             "SELECT id, kind, text_content, html_content, image_file, files_json, \
              content_hash, source_app, created_at_ms, last_used_at_ms, favorite \
-             FROM clipboard_items ORDER BY favorite DESC, last_used_at_ms DESC, id DESC LIMIT ?1",
-            [normalized_limit(limit) as i64],
+             FROM clipboard_items ORDER BY last_used_at_ms DESC, id DESC LIMIT ?1 OFFSET ?2",
+            [normalized_limit(limit) as i64, normalized_offset(offset)],
             &self.image_directory,
         )
     }
 
-    fn search(&self, query: &str, limit: usize) -> Result<Vec<ClipboardItem>, StorageError> {
+    fn search_page(
+        &self,
+        query: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ClipboardItem>, StorageError> {
         let query = query.trim();
         if query.is_empty() {
-            return self.list(limit);
+            return self.list_page(offset, limit);
         }
         if limit == 0 {
             return Ok(Vec::new());
@@ -263,17 +268,62 @@ impl ClipboardStorage for SqliteClipboardStorage {
              content_hash, source_app, created_at_ms, last_used_at_ms, favorite \
              FROM clipboard_items \
              WHERE text_content LIKE ?1 ESCAPE '\\' COLLATE NOCASE \
-                OR html_content LIKE ?1 ESCAPE '\\' COLLATE NOCASE \
                 OR source_app LIKE ?1 ESCAPE '\\' COLLATE NOCASE \
                 OR files_json LIKE ?1 ESCAPE '\\' COLLATE NOCASE \
-             ORDER BY favorite DESC, last_used_at_ms DESC, id DESC LIMIT ?2",
+              ORDER BY last_used_at_ms DESC, id DESC LIMIT ?2 OFFSET ?3",
         )?;
         let items = statement
-            .query_map(params![pattern, normalized_limit(limit) as i64], |row| {
-                item_from_row(row, &self.image_directory)
-            })?
+            .query_map(
+                params![
+                    pattern,
+                    normalized_limit(limit) as i64,
+                    normalized_offset(offset)
+                ],
+                |row| item_from_row(row, &self.image_directory),
+            )?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(items)
+    }
+
+    fn count(&self, query: Option<&str>) -> Result<usize, StorageError> {
+        let query = query.map(str::trim).filter(|value| !value.is_empty());
+        let connection = self.lock_connection()?;
+        let count: i64 = if let Some(query) = query {
+            let pattern = format!("%{}%", escape_like(query));
+            connection.query_row(
+                "SELECT COUNT(*) FROM clipboard_items \
+                 WHERE text_content LIKE ?1 ESCAPE '\\' COLLATE NOCASE \
+                    OR source_app LIKE ?1 ESCAPE '\\' COLLATE NOCASE \
+                    OR files_json LIKE ?1 ESCAPE '\\' COLLATE NOCASE",
+                [pattern],
+                |row| row.get(0),
+            )?
+        } else {
+            connection.query_row("SELECT COUNT(*) FROM clipboard_items", [], |row| row.get(0))?
+        };
+        usize::try_from(count)
+            .map_err(|_| StorageError::InvalidData("clipboard item count is invalid".into()))
+    }
+
+    fn delete(&self, id: i64) -> Result<bool, StorageError> {
+        let mut connection = self.lock_connection()?;
+        let transaction = connection.transaction()?;
+        let image_file = transaction
+            .query_row(
+                "SELECT image_file FROM clipboard_items WHERE id = ?1",
+                [id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?;
+        if image_file.is_none() {
+            return Ok(false);
+        }
+        transaction.execute("DELETE FROM clipboard_items WHERE id = ?1", [id])?;
+        transaction.commit()?;
+        if let Some(image_file) = image_file.flatten() {
+            self.remove_unreferenced_images(&connection, [image_file])?;
+        }
+        Ok(true)
     }
 
     fn set_favorite(&self, id: i64, favorite: bool) -> Result<bool, StorageError> {
@@ -282,6 +332,64 @@ impl ClipboardStorage for SqliteClipboardStorage {
             "UPDATE clipboard_items SET favorite = ?1 WHERE id = ?2",
             params![favorite, id],
         )? > 0)
+    }
+
+    fn image_preview(
+        &self,
+        id: i64,
+        max_width: u32,
+        max_height: u32,
+    ) -> Result<Option<ClipboardImagePreview>, StorageError> {
+        if max_width == 0 || max_height == 0 {
+            return Err(StorageError::InvalidData(
+                "image preview dimensions must be positive".into(),
+            ));
+        }
+        let Some(item) = self.get(id)? else {
+            return Ok(None);
+        };
+        if item.kind != ClipboardKind::Image {
+            return Err(StorageError::InvalidData(
+                "clipboard item is not an image".into(),
+            ));
+        }
+        let path = item
+            .image_path
+            .ok_or_else(|| StorageError::InvalidData("image item has no managed file".into()))?;
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| is_managed_image_file(value))
+            .ok_or_else(|| StorageError::InvalidData("invalid managed image path".into()))?;
+        if path != self.image_directory.join(file_name) {
+            return Err(StorageError::InvalidData(
+                "managed image path escaped its storage directory".into(),
+            ));
+        }
+        if !path.is_file() {
+            return Ok(None);
+        }
+
+        let source = image::open(&path)
+            .map_err(|error| StorageError::InvalidData(format!("unable to decode image: {error}")))?
+            .into_rgba8();
+        let source_width = source.width().max(1);
+        let source_height = source.height().max(1);
+        let scale = (f64::from(max_width) / f64::from(source_width))
+            .min(f64::from(max_height) / f64::from(source_height))
+            .min(1.0);
+        let preview_width = (f64::from(source_width) * scale).round().max(1.0) as u32;
+        let preview_height = (f64::from(source_height) * scale).round().max(1.0) as u32;
+        let preview = image::imageops::resize(
+            &source,
+            preview_width,
+            preview_height,
+            image::imageops::FilterType::Lanczos3,
+        );
+        let width = preview.width();
+        let height = preview.height();
+        let png = png_bytes(&preview).map_err(StorageError::InvalidData)?;
+        Ok(Some(ClipboardImagePreview { png, width, height }))
     }
 
     fn enforce_retention(&self, now_ms: i64) -> Result<RetentionResult, StorageError> {
@@ -440,6 +548,10 @@ fn collect_removals<const N: usize>(
 
 fn normalized_limit(limit: usize) -> usize {
     limit.min(MAX_QUERY_RESULTS)
+}
+
+fn normalized_offset(offset: usize) -> i64 {
+    i64::try_from(offset).unwrap_or(i64::MAX)
 }
 
 fn duration_millis(duration: Duration) -> i64 {
