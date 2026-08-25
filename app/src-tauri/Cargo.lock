@@ -2380,6 +2380,8 @@ dependencies = [
  "base64 0.22.1",
  "directories",
  "image 0.24.9",
+ "objc2",
+ "objc2-app-kit",
  "rfd",
  "rusqlite",
  "screenshots",
