@@ -39,14 +39,30 @@ jobs:
 
       - name: Record toolchain and architecture
         run: |
-          uname -m
-          rustc --version
-          cargo --version
-          test "$(uname -m)" = "${{ matrix.expected-arch }}"
+          architecture="$(uname -m)"
+          rustc_version="$(rustc --version)"
+          cargo_version="$(cargo --version)"
+          echo "$architecture"
+          echo "$rustc_version"
+          echo "$cargo_version"
+          echo "::notice title=macOS runner::arch=$architecture; $rustc_version; $cargo_version"
+          test "$architecture" = "${{ matrix.expected-arch }}"
 
       - name: Check Rust backend
         working-directory: app/src-tauri
-        run: cargo check --locked
+        run: |
+          set -o pipefail
+          cargo check --locked 2>&1 | tee cargo-check.log
+
+      - name: Publish Rust check diagnostics
+        if: failure()
+        working-directory: app/src-tauri
+        run: |
+          diagnostic="$(tail -n 160 cargo-check.log)"
+          diagnostic="${diagnostic//'%'/'%25'}"
+          diagnostic="${diagnostic//$'\r'/'%0D'}"
+          diagnostic="${diagnostic//$'\n'/'%0A'}"
+          echo "::error title=cargo check diagnostics::$diagnostic"
 
       - name: Test Rust backend
         working-directory: app/src-tauri
