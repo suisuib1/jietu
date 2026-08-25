@@ -522,10 +522,12 @@ fn capture_snapshot(
     }
 
     snapshot.file_urls = read_file_urls(pasteboard, &snapshot.types);
-    snapshot.png = read_data(pasteboard, &snapshot.types, NSPasteboardTypePNG);
-    snapshot.html = read_string(pasteboard, &snapshot.types, NSPasteboardTypeHTML);
-    snapshot.tiff = read_data(pasteboard, &snapshot.types, NSPasteboardTypeTIFF);
-    snapshot.text = read_string(pasteboard, &snapshot.types, NSPasteboardTypeString);
+    snapshot.png = read_data(pasteboard, &snapshot.types, unsafe { NSPasteboardTypePNG });
+    snapshot.html = read_string(pasteboard, &snapshot.types, unsafe { NSPasteboardTypeHTML });
+    snapshot.tiff = read_data(pasteboard, &snapshot.types, unsafe { NSPasteboardTypeTIFF });
+    snapshot.text = read_string(pasteboard, &snapshot.types, unsafe {
+        NSPasteboardTypeString
+    });
     Ok(snapshot)
 }
 

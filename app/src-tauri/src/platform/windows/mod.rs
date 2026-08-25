@@ -1,3 +1,4 @@
+#[cfg(target_os = "windows")]
 pub(crate) mod capture;
 #[cfg(target_os = "windows")]
 #[allow(dead_code)]
