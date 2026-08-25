@@ -58,7 +58,7 @@ jobs:
         if: failure()
         working-directory: app/src-tauri
         run: |
-          diagnostic="$(tail -n 160 cargo-check.log)"
+          diagnostic="$(tail -n 50 cargo-check.log)"
           diagnostic="${diagnostic//'%'/'%25'}"
           diagnostic="${diagnostic//$'\r'/'%0D'}"
           diagnostic="${diagnostic//$'\n'/'%0A'}"
