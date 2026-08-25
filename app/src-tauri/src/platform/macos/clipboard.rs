@@ -65,7 +65,7 @@ impl fmt::Display for MacClipboardError {
 impl Error for MacClipboardError {}
 
 #[cfg(target_os = "macos")]
-type MacClipboardEvent = Result<Option<ClipboardInput>, MacClipboardError>;
+pub(crate) type MacClipboardEvent = Result<Option<ClipboardInput>, MacClipboardError>;
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -341,7 +341,7 @@ const fn hex_value(value: u8) -> Option<u8> {
 #[cfg(target_os = "macos")]
 pub(crate) struct MacClipboardWatcher {
     stop_sender: Sender<()>,
-    events: Receiver<MacClipboardEvent>,
+    events: Option<Receiver<MacClipboardEvent>>,
     thread: Option<JoinHandle<Result<(), MacClipboardError>>>,
 }
 
@@ -359,7 +359,7 @@ impl MacClipboardWatcher {
         match ready_receiver.recv() {
             Ok(Ok(())) => Ok(Self {
                 stop_sender,
-                events,
+                events: Some(events),
                 thread: Some(thread),
             }),
             Ok(Err(error)) => {
@@ -373,8 +373,8 @@ impl MacClipboardWatcher {
         }
     }
 
-    pub(crate) fn events(&self) -> &Receiver<MacClipboardEvent> {
-        &self.events
+    pub(crate) fn take_events(&mut self) -> Option<Receiver<MacClipboardEvent>> {
+        self.events.take()
     }
 
     pub(crate) fn stop(mut self) -> Result<(), MacClipboardError> {

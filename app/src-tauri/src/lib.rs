@@ -1,5 +1,6 @@
 mod core;
 mod platform;
+mod runtime;
 
 use core::capture::{Rect, nearest_screen, screen_geometry_score, select_screen_containing_point};
 use core::image::{image_is_blank, png_bytes};
@@ -24,6 +25,7 @@ use arboard::{Clipboard, ImageData};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use directories::BaseDirs;
 use image::RgbaImage;
+use runtime::clipboard::ClipboardRuntimeState;
 use screenshots::Screen;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
@@ -1761,6 +1763,7 @@ pub fn run() {
             screen_permission_requested: AtomicBool::new(false),
             capture_in_progress: AtomicBool::new(false),
         })
+        .manage(ClipboardRuntimeState::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -1773,6 +1776,13 @@ pub fn run() {
                 .launch_at_startup;
             if let Err(error) = apply_autostart(app.handle(), launch_at_startup) {
                 eprintln!("Unable to update launch-at-startup setting: {error}");
+            }
+
+            match app.state::<ClipboardRuntimeState>().initialize(app.handle()) {
+                Ok(()) => eprintln!("Clipboard runtime initialized"),
+                Err(error) => {
+                    eprintln!("Clipboard runtime disabled for this session: {error}");
+                }
             }
 
             let menu = build_tray_menu(app.handle())?;
@@ -1879,16 +1889,21 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building LiteSnap");
 
-    app.run(|_app, event| {
-        if let tauri::RunEvent::ExitRequested {
+    app.run(|app, event| match event {
+        tauri::RunEvent::ExitRequested {
             code: None, api, ..
-        } = event
-        {
+        } => {
             // Closing the capture, settings, or pinned-image window must not
             // terminate this tray application. Programmatic exits (the tray
             // menu's Quit action) include an exit code and remain allowed.
             api.prevent_exit();
         }
+        tauri::RunEvent::Exit => {
+            if let Err(error) = app.state::<ClipboardRuntimeState>().shutdown() {
+                eprintln!("Clipboard runtime shutdown failed: {error}");
+            }
+        }
+        _ => {}
     });
 }
 

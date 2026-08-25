@@ -45,7 +45,7 @@ const WINDOW_CLASS_NAME: [u16; 25] = [
 const CLIPBOARD_RETRY_DELAYS_MS: [u64; 5] = [10, 20, 40, 80, 100];
 const MAX_PROCESS_PATH_U16: usize = 32_768;
 
-type ClipboardBackendEvent = Result<Option<ClipboardInput>, ClipboardBackendError>;
+pub(crate) type ClipboardBackendEvent = Result<Option<ClipboardInput>, ClipboardBackendError>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ClipboardBackendError {
@@ -101,7 +101,7 @@ impl Error for ClipboardBackendError {}
 
 pub(crate) struct WindowsClipboardWatcher {
     message_window: isize,
-    events: Receiver<ClipboardBackendEvent>,
+    events: Option<Receiver<ClipboardBackendEvent>>,
     thread: Option<JoinHandle<Result<(), ClipboardBackendError>>>,
 }
 
@@ -120,7 +120,7 @@ impl WindowsClipboardWatcher {
         match ready_receiver.recv() {
             Ok(Ok(message_window)) => Ok(Self {
                 message_window,
-                events,
+                events: Some(events),
                 thread: Some(thread),
             }),
             Ok(Err(error)) => {
@@ -137,8 +137,8 @@ impl WindowsClipboardWatcher {
         }
     }
 
-    pub(crate) fn events(&self) -> &Receiver<ClipboardBackendEvent> {
-        &self.events
+    pub(crate) fn take_events(&mut self) -> Option<Receiver<ClipboardBackendEvent>> {
+        self.events.take()
     }
 
     pub(crate) fn message_window_handle(&self) -> isize {
