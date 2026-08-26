@@ -2383,6 +2383,7 @@ dependencies = [
  "image 0.24.9",
  "objc2",
  "objc2-app-kit",
+ "objc2-foundation",
  "rfd",
  "rusqlite",
  "screenshots",
