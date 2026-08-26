@@ -3,4 +3,5 @@ pub(crate) mod capture;
 #[cfg(target_os = "windows")]
 #[allow(dead_code)]
 pub(crate) mod clipboard;
+#[cfg(target_os = "windows")]
 pub(crate) mod paste;
