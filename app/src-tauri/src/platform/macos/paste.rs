@@ -166,13 +166,13 @@ pub(crate) fn send_command_v() -> Result<(), MacPasteError> {
 }
 
 #[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
     static kAXTrustedCheckOptionPrompt: *const c_void;
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn CFDictionaryCreate(
         allocator: *const c_void,
         keys: *const *const c_void,
