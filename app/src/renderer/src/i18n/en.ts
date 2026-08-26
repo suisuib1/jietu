@@ -81,6 +81,7 @@ export interface Messages {
     operationError: string
     pasteFailed: string
     pasteCopiedOnly: string
+    pasteAccessibilityRequired: string
     imageUnavailable: string
     preview: string
     favorite: string
@@ -176,6 +177,7 @@ export const en: Messages = {
     operationError: 'Clipboard history could not be loaded',
     pasteFailed: 'Could not restore clipboard content',
     pasteCopiedOnly: 'Copied. Press Ctrl+V to paste.',
+    pasteAccessibilityRequired: 'Copied. Enable Accessibility permission to paste automatically.',
     imageUnavailable: 'Image unavailable',
     preview: 'Preview',
     favorite: 'Add to favorites',

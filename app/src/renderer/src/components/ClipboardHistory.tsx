@@ -236,7 +236,9 @@ function ClipboardHistory(): React.JSX.Element {
     state.setFeedback(null)
     try {
       const outcome = await window.api.quickPaste(id)
-      if (outcome.kind === 'copiedOnly') state.setFeedback('copiedOnly')
+      if (outcome.kind === 'copiedOnly') {
+        state.setFeedback(outcome.reason === 'accessibility_required' ? 'accessibilityRequired' : 'copiedOnly')
+      }
       if (outcome.kind === 'failed') state.setFeedback('failed')
     } catch {
       state.setFeedback('failed')
@@ -462,7 +464,7 @@ function ClipboardHistory(): React.JSX.Element {
             )}
           </header>
           <div className="history-preview__content">{renderPreview(selectedDetail)}</div>
-          {feedback && <div className="history-feedback">{feedback === 'failed' ? history.pasteFailed : history.pasteCopiedOnly}</div>}
+          {feedback && <div className="history-feedback">{feedback === 'failed' ? history.pasteFailed : feedback === 'accessibilityRequired' ? history.pasteAccessibilityRequired : history.pasteCopiedOnly}</div>}
           {selectedDetail?.sourceApplication && (
             <footer className="history-preview__footer">{selectedDetail.sourceApplication}</footer>
           )}

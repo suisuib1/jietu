@@ -97,6 +97,14 @@ struct CaptureData {
     physical_height: u32,
 }
 
+#[derive(Clone, Debug)]
+enum PreviousPasteTarget {
+    #[cfg(target_os = "windows")]
+    Windows(isize),
+    #[cfg(target_os = "macos")]
+    Mac(crate::platform::macos::paste::MacPasteTarget),
+}
+
 struct AppState {
     settings: Mutex<AppSettings>,
     capture: Mutex<Option<CaptureData>>,
@@ -110,7 +118,9 @@ struct AppState {
     scroll_control_ready: AtomicBool,
     screen_permission_requested: AtomicBool,
     capture_in_progress: AtomicBool,
-    previous_paste_target: Mutex<Option<isize>>,
+    previous_paste_target: Mutex<Option<PreviousPasteTarget>>,
+    #[cfg(target_os = "macos")]
+    accessibility_prompted: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -646,10 +656,17 @@ fn handle_history_shortcut(app: &AppHandle) {
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false);
     if !visible {
+        #[cfg(target_os = "macos")]
+        if let Some(target) = crate::platform::macos::paste::capture_frontmost() {
+            if let Ok(mut previous) = app.state::<AppState>().previous_paste_target.lock() {
+                *previous = Some(PreviousPasteTarget::Mac(target));
+            }
+        }
         #[cfg(target_os = "windows")]
         {
             let target = crate::platform::windows::paste::current_foreground();
-            *state.previous_paste_target.lock().unwrap() = (target != 0).then_some(target);
+            *state.previous_paste_target.lock().unwrap() =
+                (target != 0).then_some(PreviousPasteTarget::Windows(target));
         }
     }
     if let Err(error) = toggle_clipboard_history_window(app) {
@@ -1941,10 +1958,10 @@ fn quick_paste(
             .map_err(|error| error.to_string())?;
         let _ = app.emit("clipboard-history-changed", ());
         hide_clipboard_history_window(&app)?;
-        let target = *state.previous_paste_target.lock().unwrap();
-        let Some(target) =
-            target.filter(|target| crate::platform::windows::paste::valid_target(*target, None))
-        else {
+        let target = state.previous_paste_target.lock().unwrap().clone();
+        let Some(PreviousPasteTarget::Windows(target)) = target.filter(|target| {
+            matches!(target, PreviousPasteTarget::Windows(value) if crate::platform::windows::paste::valid_target(*value, None))
+        }) else {
             return Ok(QuickPasteOutcome::CopiedOnly {
                 reason: "target_unavailable".into(),
             });
@@ -1962,7 +1979,57 @@ fn quick_paste(
         }
         return Ok(QuickPasteOutcome::Pasted);
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let service = clipboard
+            .history_service()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "history_unavailable".to_owned())?;
+        let Some((item, payload)) = service.restore_payload(id).map_err(|error| {
+            eprintln!("QuickPaste payload restore failed for item {id}: {error}");
+            "clipboard_restore_failed".to_owned()
+        })?
+        else {
+            return Err("clipboard_restore_failed".to_owned());
+        };
+        clipboard.register_self_write(item.hash.clone(), current_time_ms());
+        if crate::platform::macos::paste::write_clipboard(&payload).is_err() {
+            return Ok(QuickPasteOutcome::Failed {
+                reason: "clipboard_restore_failed".into(),
+            });
+        }
+        service
+            .mark_used(id, current_time_ms())
+            .map_err(|error| error.to_string())?;
+        let _ = app.emit("clipboard-history-changed", ());
+        hide_clipboard_history_window(&app)?;
+        if !crate::platform::macos::paste::accessibility_trusted(false) {
+            if !state.accessibility_prompted.swap(true, Ordering::AcqRel) {
+                let _ = crate::platform::macos::paste::accessibility_trusted(true);
+            }
+            return Ok(QuickPasteOutcome::CopiedOnly {
+                reason: "accessibility_required".into(),
+            });
+        }
+        let target = state.previous_paste_target.lock().unwrap().clone();
+        let Some(PreviousPasteTarget::Mac(target)) = target else {
+            return Ok(QuickPasteOutcome::CopiedOnly {
+                reason: "target_unavailable".into(),
+            });
+        };
+        if !crate::platform::macos::paste::activate_target(&target) {
+            return Ok(QuickPasteOutcome::CopiedOnly {
+                reason: "target_activation_failed".into(),
+            });
+        }
+        if crate::platform::macos::paste::send_command_v().is_err() {
+            return Ok(QuickPasteOutcome::CopiedOnly {
+                reason: "input_injection_failed".into(),
+            });
+        }
+        return Ok(QuickPasteOutcome::Pasted);
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = (app, state, clipboard, id);
         Err("quick_paste_unavailable".to_owned())
@@ -2001,7 +2068,9 @@ pub fn run() {
             scroll_control_ready: AtomicBool::new(false),
             screen_permission_requested: AtomicBool::new(false),
             capture_in_progress: AtomicBool::new(false),
-            previous_paste_target: Mutex::new(None),
+        previous_paste_target: Mutex::new(None),
+        #[cfg(target_os = "macos")]
+        accessibility_prompted: std::sync::atomic::AtomicBool::new(false),
         })
         .manage(ClipboardRuntimeState::default())
         .setup(|app| {

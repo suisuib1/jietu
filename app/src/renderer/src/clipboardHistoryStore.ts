@@ -14,7 +14,7 @@ interface ClipboardHistoryState {
   dirty: boolean
   error: HistoryError
   pasting: boolean
-  feedback: 'copiedOnly' | 'failed' | null
+  feedback: 'copiedOnly' | 'accessibilityRequired' | 'failed' | null
   details: Record<number, ClipboardHistoryDetail>
   imagePreviews: Record<string, string>
   replaceItems: (items: ClipboardHistorySummary[], hasMore: boolean) => void
@@ -26,7 +26,7 @@ interface ClipboardHistoryState {
   setDirty: (dirty: boolean) => void
   setError: (error: HistoryError) => void
   setPasting: (pasting: boolean) => void
-  setFeedback: (feedback: 'copiedOnly' | 'failed' | null) => void
+  setFeedback: (feedback: 'copiedOnly' | 'accessibilityRequired' | 'failed' | null) => void
   cacheDetail: (detail: ClipboardHistoryDetail) => void
   cacheImagePreview: (key: string, dataUrl: string) => void
   updateFavorite: (id: number, favorite: boolean) => void
