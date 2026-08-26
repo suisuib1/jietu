@@ -81,6 +81,8 @@ export const zh: Messages = {
     noResults: '未找到匹配内容',
     unavailable: '剪贴板历史暂不可用',
     operationError: '无法加载剪贴板历史',
+    pasteFailed: '恢复剪贴板内容失败',
+    pasteCopiedOnly: '已复制，请手动按 Ctrl+V',
     imageUnavailable: '图片不可用',
     preview: '预览',
     favorite: '收藏',

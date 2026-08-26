@@ -79,6 +79,8 @@ export interface Messages {
     noResults: string
     unavailable: string
     operationError: string
+    pasteFailed: string
+    pasteCopiedOnly: string
     imageUnavailable: string
     preview: string
     favorite: string
@@ -172,6 +174,8 @@ export const en: Messages = {
     noResults: 'No matching content',
     unavailable: 'Clipboard history is temporarily unavailable',
     operationError: 'Clipboard history could not be loaded',
+    pasteFailed: 'Could not restore clipboard content',
+    pasteCopiedOnly: 'Copied. Press Ctrl+V to paste.',
     imageUnavailable: 'Image unavailable',
     preview: 'Preview',
     favorite: 'Add to favorites',

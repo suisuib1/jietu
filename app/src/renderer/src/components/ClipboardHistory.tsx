@@ -89,6 +89,8 @@ function ClipboardHistory(): React.JSX.Element {
   const initialized = useClipboardHistoryStore((state) => state.initialized)
   const visible = useClipboardHistoryStore((state) => state.visible)
   const error = useClipboardHistoryStore((state) => state.error)
+  const pasting = useClipboardHistoryStore((state) => state.pasting)
+  const feedback = useClipboardHistoryStore((state) => state.feedback)
   const details = useClipboardHistoryStore((state) => state.details)
   const imagePreviews = useClipboardHistoryStore((state) => state.imagePreviews)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -227,6 +229,22 @@ function ClipboardHistory(): React.JSX.Element {
     }
   }, [])
 
+  const quickPaste = useCallback(async (id: number): Promise<void> => {
+    const state = useClipboardHistoryStore.getState()
+    if (state.pasting) return
+    state.setPasting(true)
+    state.setFeedback(null)
+    try {
+      const outcome = await window.api.quickPaste(id)
+      if (outcome.kind === 'copiedOnly') state.setFeedback('copiedOnly')
+      if (outcome.kind === 'failed') state.setFeedback('failed')
+    } catch {
+      state.setFeedback('failed')
+    } finally {
+      state.setPasting(false)
+    }
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
@@ -248,6 +266,15 @@ function ClipboardHistory(): React.JSX.Element {
         )
         return
       }
+      if (event.key === 'Enter' && !event.isComposing) {
+        const state = useClipboardHistoryStore.getState()
+        const item = state.items.find((candidate) => candidate.id === state.selectedId)
+        if (item) {
+          event.preventDefault()
+          void quickPaste(item.id)
+        }
+        return
+      }
       if (isTextInput(event.target)) return
       const state = useClipboardHistoryStore.getState()
       const item = state.items.find((candidate) => candidate.id === state.selectedId)
@@ -262,7 +289,7 @@ function ClipboardHistory(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleteItem, toggleFavorite])
+  }, [deleteItem, quickPaste, toggleFavorite])
 
   useEffect(() => {
     const root = listRef.current
@@ -435,6 +462,7 @@ function ClipboardHistory(): React.JSX.Element {
             )}
           </header>
           <div className="history-preview__content">{renderPreview(selectedDetail)}</div>
+          {feedback && <div className="history-feedback">{feedback === 'failed' ? history.pasteFailed : history.pasteCopiedOnly}</div>}
           {selectedDetail?.sourceApplication && (
             <footer className="history-preview__footer">{selectedDetail.sourceApplication}</footer>
           )}

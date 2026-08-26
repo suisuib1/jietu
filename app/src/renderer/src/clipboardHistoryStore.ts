@@ -13,6 +13,8 @@ interface ClipboardHistoryState {
   visible: boolean
   dirty: boolean
   error: HistoryError
+  pasting: boolean
+  feedback: 'copiedOnly' | 'failed' | null
   details: Record<number, ClipboardHistoryDetail>
   imagePreviews: Record<string, string>
   replaceItems: (items: ClipboardHistorySummary[], hasMore: boolean) => void
@@ -23,6 +25,8 @@ interface ClipboardHistoryState {
   setVisible: (visible: boolean) => void
   setDirty: (dirty: boolean) => void
   setError: (error: HistoryError) => void
+  setPasting: (pasting: boolean) => void
+  setFeedback: (feedback: 'copiedOnly' | 'failed' | null) => void
   cacheDetail: (detail: ClipboardHistoryDetail) => void
   cacheImagePreview: (key: string, dataUrl: string) => void
   updateFavorite: (id: number, favorite: boolean) => void
@@ -77,6 +81,8 @@ export const useClipboardHistoryStore = create<ClipboardHistoryState>((set) => (
   visible: false,
   dirty: false,
   error: null,
+  pasting: false,
+  feedback: null,
   details: {},
   imagePreviews: {},
   replaceItems: (items, hasMore) =>
@@ -99,6 +105,8 @@ export const useClipboardHistoryStore = create<ClipboardHistoryState>((set) => (
   setVisible: (visible) => set({ visible }),
   setDirty: (dirty) => set({ dirty }),
   setError: (error) => set({ error, initialized: true }),
+  setPasting: (pasting) => set({ pasting }),
+  setFeedback: (feedback) => set({ feedback }),
   cacheDetail: (detail) =>
     set((state) => ({
       details: limitedRecord(state.details, String(detail.id), detail, MAX_DETAIL_CACHE)

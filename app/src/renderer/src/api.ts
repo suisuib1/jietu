@@ -69,6 +69,11 @@ export interface ClipboardHistoryImagePreview {
   height: number
 }
 
+export type QuickPasteOutcome =
+  | { kind: 'pasted' }
+  | { kind: 'copiedOnly'; reason: string }
+  | { kind: 'failed'; reason: string }
+
 export interface Api {
   closeOverlay: () => void
   showCaptureOverlay: () => Promise<boolean>
@@ -110,6 +115,7 @@ export interface Api {
     maxWidth: number,
     maxHeight: number
   ) => Promise<ClipboardHistoryImagePreview | null>
+  quickPaste: (id: number) => Promise<QuickPasteOutcome>
   onClipboardHistoryChanged: (callback: () => void) => () => void
   onClipboardHistoryWindowShown: (callback: () => void) => () => void
   onClipboardHistoryWindowHidden: (callback: () => void) => () => void
@@ -198,6 +204,7 @@ export const api: Api = {
   clipboardHistoryCount: (query) => invoke('clipboard_history_count', { query: query || null }),
   clipboardHistoryImagePreview: (id, maxWidth, maxHeight) =>
     invoke('clipboard_history_image_preview', { id, maxWidth, maxHeight }),
+  quickPaste: (id) => invoke('quick_paste', { id }),
   onClipboardHistoryChanged: (callback) => subscribe('clipboard-history-changed', callback),
   onClipboardHistoryWindowShown: (callback) =>
     subscribe('clipboard-history-window-shown', callback),

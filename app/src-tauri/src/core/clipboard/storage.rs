@@ -80,12 +80,14 @@ pub(crate) trait ClipboardStorage: Send + Sync {
     fn count(&self, query: Option<&str>) -> Result<usize, StorageError>;
     fn delete(&self, id: i64) -> Result<bool, StorageError>;
     fn set_favorite(&self, id: i64, favorite: bool) -> Result<bool, StorageError>;
+    fn mark_used(&self, id: i64, now_ms: i64) -> Result<bool, StorageError>;
     fn image_preview(
         &self,
         id: i64,
         max_width: u32,
         max_height: u32,
     ) -> Result<Option<ClipboardImagePreview>, StorageError>;
+    fn image_rgba8(&self, id: i64) -> Result<Option<(u32, u32, Vec<u8>)>, StorageError>;
     fn enforce_retention(&self, now_ms: i64) -> Result<RetentionResult, StorageError>;
 
     fn list(&self, limit: usize) -> Result<Vec<ClipboardItem>, StorageError> {

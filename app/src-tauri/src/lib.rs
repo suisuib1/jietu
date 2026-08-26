@@ -25,7 +25,7 @@ use arboard::{Clipboard, ImageData};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use directories::BaseDirs;
 use image::RgbaImage;
-use runtime::clipboard::ClipboardRuntimeState;
+use runtime::clipboard::{ClipboardRuntimeState, current_time_ms};
 use runtime::clipboard_history::{
     clipboard_history_count, clipboard_history_delete, clipboard_history_get,
     clipboard_history_image_preview, clipboard_history_list, clipboard_history_search,
@@ -110,6 +110,15 @@ struct AppState {
     scroll_control_ready: AtomicBool,
     screen_permission_requested: AtomicBool,
     capture_in_progress: AtomicBool,
+    previous_paste_target: Mutex<Option<isize>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum QuickPasteOutcome {
+    Pasted,
+    CopiedOnly { reason: String },
+    Failed { reason: String },
 }
 
 #[derive(Debug)]
@@ -631,6 +640,17 @@ fn handle_history_shortcut(app: &AppHandle) {
             return;
         }
         *last = Some(now);
+    }
+    let visible = app
+        .get_webview_window(HISTORY_WINDOW_LABEL)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if !visible {
+        #[cfg(target_os = "windows")]
+        {
+            let target = crate::platform::windows::paste::current_foreground();
+            *state.previous_paste_target.lock().unwrap() = (target != 0).then_some(target);
+        }
     }
     if let Err(error) = toggle_clipboard_history_window(app) {
         eprintln!("Unable to toggle clipboard history window: {error}");
@@ -1886,6 +1906,69 @@ fn hide_clipboard_history(app: AppHandle) -> Result<(), String> {
     hide_clipboard_history_window(&app)
 }
 
+#[tauri::command]
+fn quick_paste(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    clipboard: State<'_, ClipboardRuntimeState>,
+    id: i64,
+) -> Result<QuickPasteOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let service = clipboard
+            .history_service()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "history_unavailable".to_owned())?;
+        let Some((item, payload)) = service.restore_payload(id).map_err(|error| {
+            eprintln!("QuickPaste payload restore failed for item {id}: {error}");
+            "clipboard_restore_failed".to_owned()
+        })?
+        else {
+            return Err("clipboard_restore_failed".to_owned());
+        };
+        clipboard
+            .register_self_write(item.hash.clone(), current_time_ms())
+            .map_err(|error| error.to_string())?;
+        if let Err(error) = crate::platform::windows::paste::write_clipboard(&payload) {
+            let _ = clipboard.clear_self_write();
+            eprintln!("QuickPaste clipboard write failed for item {id}: {error:?}");
+            return Ok(QuickPasteOutcome::Failed {
+                reason: "clipboard_restore_failed".into(),
+            });
+        }
+        service
+            .mark_used(id, current_time_ms())
+            .map_err(|error| error.to_string())?;
+        let _ = app.emit("clipboard-history-changed", ());
+        hide_clipboard_history_window(&app)?;
+        let target = *state.previous_paste_target.lock().unwrap();
+        let Some(target) =
+            target.filter(|target| crate::platform::windows::paste::valid_target(*target, None))
+        else {
+            return Ok(QuickPasteOutcome::CopiedOnly {
+                reason: "target_unavailable".into(),
+            });
+        };
+        if !crate::platform::windows::paste::restore_foreground(target, Duration::from_millis(300))
+        {
+            return Ok(QuickPasteOutcome::CopiedOnly {
+                reason: "focus_restore_failed".into(),
+            });
+        }
+        if crate::platform::windows::paste::send_ctrl_v().is_err() {
+            return Ok(QuickPasteOutcome::CopiedOnly {
+                reason: "input_injection_failed".into(),
+            });
+        }
+        return Ok(QuickPasteOutcome::Pasted);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, state, clipboard, id);
+        Err("quick_paste_unavailable".to_owned())
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
@@ -1918,6 +2001,7 @@ pub fn run() {
             scroll_control_ready: AtomicBool::new(false),
             screen_permission_requested: AtomicBool::new(false),
             capture_in_progress: AtomicBool::new(false),
+            previous_paste_target: Mutex::new(None),
         })
         .manage(ClipboardRuntimeState::default())
         .setup(|app| {
@@ -2054,6 +2138,7 @@ pub fn run() {
             clipboard_history_set_favorite,
             clipboard_history_count,
             clipboard_history_image_preview,
+            quick_paste,
         ])
         .build(tauri::generate_context!())
         .expect("error while building LiteSnap");

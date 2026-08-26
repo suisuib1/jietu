@@ -2,7 +2,10 @@ use std::{path::Path, sync::Arc};
 
 use serde::Serialize;
 
-use super::{ClipboardImagePreview, ClipboardItem, ClipboardKind, ClipboardStorage, StorageError};
+use super::{
+    ClipboardImagePreview, ClipboardItem, ClipboardKind, ClipboardRestorePayload, ClipboardStorage,
+    RestorePayloadError, StorageError,
+};
 
 const PREVIEW_TEXT_LIMIT: usize = 240;
 
@@ -80,6 +83,48 @@ impl ClipboardHistoryService {
 
     pub(crate) fn set_favorite(&self, id: i64, favorite: bool) -> Result<bool, StorageError> {
         self.storage.set_favorite(id, favorite)
+    }
+
+    pub(crate) fn mark_used(&self, id: i64, now_ms: i64) -> Result<bool, StorageError> {
+        self.storage.mark_used(id, now_ms)
+    }
+
+    pub(crate) fn restore_payload(
+        &self,
+        id: i64,
+    ) -> Result<Option<(ClipboardItem, ClipboardRestorePayload)>, RestorePayloadError> {
+        let Some(item) = self.storage.get(id).map_err(RestorePayloadError::Storage)? else {
+            return Ok(None);
+        };
+        let payload = match item.kind {
+            ClipboardKind::Text => {
+                ClipboardRestorePayload::Text(item.text_content.clone().ok_or_else(|| {
+                    RestorePayloadError::Invalid("text item has no text content".into())
+                })?)
+            }
+            ClipboardKind::Html => ClipboardRestorePayload::Html {
+                html: item.html_content.clone().ok_or_else(|| {
+                    RestorePayloadError::Invalid("html item has no html content".into())
+                })?,
+                text: item.text_content.clone().unwrap_or_default(),
+            },
+            ClipboardKind::Files => ClipboardRestorePayload::Files(item.files.clone()),
+            ClipboardKind::Image => {
+                let (width, height, rgba8) = self
+                    .storage
+                    .image_rgba8(id)
+                    .map_err(RestorePayloadError::Storage)?
+                    .ok_or_else(|| {
+                        RestorePayloadError::Invalid("managed image is unavailable".into())
+                    })?;
+                ClipboardRestorePayload::Image {
+                    width,
+                    height,
+                    rgba8,
+                }
+            }
+        };
+        Ok(Some((item, payload)))
     }
 
     pub(crate) fn image_preview(
@@ -256,5 +301,99 @@ mod tests {
     fn missing_history_item_returns_none() {
         let directory = TestDirectory::new("missing");
         assert!(service(&directory).get(99_999).unwrap().is_none());
+    }
+
+    #[test]
+    fn restore_payload_preserves_supported_kinds_and_image_rgba8() {
+        let directory = TestDirectory::new("restore-payload");
+        let service = service(&directory);
+        service
+            .storage
+            .record(
+                ClipboardInput::Text {
+                    text: "hello".into(),
+                    source_app: None,
+                },
+                1,
+            )
+            .unwrap();
+        let text_id = service.list(0, 1).unwrap()[0].id;
+        assert_eq!(
+            service.restore_payload(text_id).unwrap().unwrap().1,
+            ClipboardRestorePayload::Text("hello".into())
+        );
+        service
+            .storage
+            .record(
+                ClipboardInput::Html {
+                    html: "<b>hello</b>".into(),
+                    text: Some("hello".into()),
+                    source_app: None,
+                },
+                2,
+            )
+            .unwrap();
+        let html_id = service
+            .list(0, 2)
+            .unwrap()
+            .iter()
+            .find(|item| item.kind == ClipboardKind::Html)
+            .unwrap()
+            .id;
+        assert_eq!(
+            service.restore_payload(html_id).unwrap().unwrap().1,
+            ClipboardRestorePayload::Html {
+                html: "<b>hello</b>".into(),
+                text: "hello".into()
+            }
+        );
+        service
+            .storage
+            .record(
+                ClipboardInput::Image {
+                    width: 1,
+                    height: 1,
+                    rgba8: vec![1, 2, 3, 255],
+                    source_app: None,
+                },
+                3,
+            )
+            .unwrap();
+        let image_id = service
+            .list(0, 3)
+            .unwrap()
+            .iter()
+            .find(|item| item.kind == ClipboardKind::Image)
+            .unwrap()
+            .id;
+        assert_eq!(
+            service.restore_payload(image_id).unwrap().unwrap().1,
+            ClipboardRestorePayload::Image {
+                width: 1,
+                height: 1,
+                rgba8: vec![1, 2, 3, 255]
+            }
+        );
+        service
+            .storage
+            .record(
+                ClipboardInput::Files {
+                    files: vec!["C:\\one.txt".into(), "C:\\two.txt".into()],
+                    source_app: None,
+                },
+                4,
+            )
+            .unwrap();
+        let files_id = service
+            .list(0, 4)
+            .unwrap()
+            .iter()
+            .find(|item| item.kind == ClipboardKind::Files)
+            .unwrap()
+            .id;
+        assert_eq!(
+            service.restore_payload(files_id).unwrap().unwrap().1,
+            ClipboardRestorePayload::Files(vec!["C:\\one.txt".into(), "C:\\two.txt".into()])
+        );
     }
 }

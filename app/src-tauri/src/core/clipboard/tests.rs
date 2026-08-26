@@ -221,6 +221,22 @@ fn duplicate_content_reuses_item_and_updates_last_used_time() {
 }
 
 #[test]
+fn mark_used_updates_recency_without_changing_favorite() {
+    let directory = TestDirectory::new("mark-used");
+    let store = storage(
+        &directory,
+        PrivacyPolicy::default(),
+        RetentionPolicy::default(),
+    );
+    let item = inserted(store.record(text("same", None), 10).unwrap());
+    assert!(store.set_favorite(item.id, true).unwrap());
+    assert!(store.mark_used(item.id, 25).unwrap());
+    let updated = store.get(item.id).unwrap().unwrap();
+    assert!(updated.favorite);
+    assert_eq!(updated.last_used_at_ms, 25);
+}
+
+#[test]
 fn canonical_image_deduplicates_and_round_trips_rgba8() {
     let directory = TestDirectory::new("image");
     let store = storage(

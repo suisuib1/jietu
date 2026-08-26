@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::core::clipboard::{
     ClipboardHistoryService, ClipboardInput, ClipboardStorage, PrivacyPolicy, RecordOutcome,
-    RetentionPolicy, SqliteClipboardStorage, StorageError,
+    RetentionPolicy, SqliteClipboardStorage, StorageError, content_hash,
 };
 
 #[cfg(target_os = "macos")]
@@ -89,7 +89,10 @@ pub(crate) struct ClipboardRuntime {
 }
 
 impl ClipboardRuntime {
-    fn start(app: &AppHandle) -> Result<Self, ClipboardRuntimeError> {
+    fn start(
+        app: &AppHandle,
+        suppression: Arc<Mutex<Option<SelfWriteToken>>>,
+    ) -> Result<Self, ClipboardRuntimeError> {
         let data_directory = app
             .path()
             .app_local_data_dir()
@@ -118,6 +121,7 @@ impl ClipboardRuntime {
             notifier,
             Arc::new(current_time_ms),
             RETENTION_WRITE_INTERVAL,
+            suppression,
         ) {
             Ok(worker) => worker,
             Err(error) => {
@@ -159,14 +163,29 @@ impl Drop for ClipboardRuntime {
     }
 }
 
-#[derive(Default)]
 pub(crate) struct ClipboardRuntimeState {
     runtime: Mutex<Option<ClipboardRuntime>>,
+    self_write_suppression: Arc<Mutex<Option<SelfWriteToken>>>,
+}
+
+#[derive(Clone, Debug)]
+struct SelfWriteToken {
+    hash: String,
+    expires_at_ms: i64,
+}
+
+impl Default for ClipboardRuntimeState {
+    fn default() -> Self {
+        Self {
+            runtime: Mutex::new(None),
+            self_write_suppression: Arc::new(Mutex::new(None)),
+        }
+    }
 }
 
 impl ClipboardRuntimeState {
     pub(crate) fn initialize(&self, app: &AppHandle) -> Result<(), ClipboardRuntimeError> {
-        let runtime = ClipboardRuntime::start(app)?;
+        let runtime = ClipboardRuntime::start(app, Arc::clone(&self.self_write_suppression))?;
         let mut slot = self
             .runtime
             .lock()
@@ -200,6 +219,31 @@ impl ClipboardRuntimeState {
             .map(Arc::clone)
             .map(ClipboardHistoryService::new))
     }
+
+    pub(crate) fn register_self_write(
+        &self,
+        hash: String,
+        now_ms: i64,
+    ) -> Result<(), ClipboardRuntimeError> {
+        let mut token = self
+            .self_write_suppression
+            .lock()
+            .map_err(|_| ClipboardRuntimeError::StatePoisoned)?;
+        *token = Some(SelfWriteToken {
+            hash,
+            expires_at_ms: now_ms.saturating_add(2_000),
+        });
+        Ok(())
+    }
+
+    pub(crate) fn clear_self_write(&self) -> Result<(), ClipboardRuntimeError> {
+        let mut token = self
+            .self_write_suppression
+            .lock()
+            .map_err(|_| ClipboardRuntimeError::StatePoisoned)?;
+        *token = None;
+        Ok(())
+    }
 }
 
 fn normalize_backend_event<E>(event: Result<Option<ClipboardInput>, E>) -> ClipboardBackendEvent
@@ -219,6 +263,7 @@ fn spawn_ingestion_worker<F>(
     notifier: HistoryNotifier,
     clock: RuntimeClock,
     retention_write_interval: usize,
+    suppression: Arc<Mutex<Option<SelfWriteToken>>>,
 ) -> Result<JoinHandle<()>, io::Error>
 where
     F: FnMut() -> Option<ClipboardBackendEvent> + Send + 'static,
@@ -229,23 +274,28 @@ where
             let mut successful_writes = 0usize;
             while let Some(event) = receive() {
                 match event {
-                    ClipboardBackendEvent::Input(input) => match storage.record(input, clock()) {
-                        Ok(RecordOutcome::Inserted(_) | RecordOutcome::Duplicate(_)) => {
-                            successful_writes = successful_writes.saturating_add(1);
-                            notifier();
-                            if retention_write_interval > 0
-                                && successful_writes % retention_write_interval == 0
-                            {
-                                if let Err(error) = storage.enforce_retention(clock()) {
-                                    eprintln!("Clipboard retention failed: {error}");
+                    ClipboardBackendEvent::Input(input) => {
+                        if consume_suppression(&suppression, &input, clock()) {
+                            continue;
+                        }
+                        match storage.record(input, clock()) {
+                            Ok(RecordOutcome::Inserted(_) | RecordOutcome::Duplicate(_)) => {
+                                successful_writes = successful_writes.saturating_add(1);
+                                notifier();
+                                if retention_write_interval > 0
+                                    && successful_writes % retention_write_interval == 0
+                                {
+                                    if let Err(error) = storage.enforce_retention(clock()) {
+                                        eprintln!("Clipboard retention failed: {error}");
+                                    }
                                 }
                             }
+                            Ok(RecordOutcome::Ignored(_)) => {}
+                            Err(error) => {
+                                eprintln!("Clipboard storage write failed: {error}");
+                            }
                         }
-                        Ok(RecordOutcome::Ignored(_)) => {}
-                        Err(error) => {
-                            eprintln!("Clipboard storage write failed: {error}");
-                        }
-                    },
+                    }
                     ClipboardBackendEvent::Skipped => {}
                     ClipboardBackendEvent::Error(error) => {
                         eprintln!("Clipboard backend event failed: {error}");
@@ -255,7 +305,29 @@ where
         })
 }
 
-fn current_time_ms() -> i64 {
+fn consume_suppression(
+    suppression: &Mutex<Option<SelfWriteToken>>,
+    input: &ClipboardInput,
+    now_ms: i64,
+) -> bool {
+    let Ok(mut token) = suppression.lock() else {
+        return false;
+    };
+    let Some(active) = token.as_ref() else {
+        return false;
+    };
+    if active.expires_at_ms < now_ms {
+        *token = None;
+        return false;
+    }
+    if active.hash == content_hash(input) {
+        *token = None;
+        return true;
+    }
+    false
+}
+
+pub(crate) fn current_time_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -350,6 +422,7 @@ mod tests {
             notifier,
             clock,
             RETENTION_WRITE_INTERVAL,
+            Arc::new(Mutex::new(None)),
         )
         .expect("spawn runtime test worker");
         (sender, worker, notifications)
@@ -460,6 +533,30 @@ mod tests {
     }
 
     #[test]
+    fn self_write_suppression_matches_exact_hash_once_and_expires() {
+        let suppression = Mutex::new(Some(SelfWriteToken {
+            hash: content_hash(&text("A")),
+            expires_at_ms: 2_000,
+        }));
+        assert!(consume_suppression(&suppression, &text("A"), 1_000));
+        assert!(!consume_suppression(&suppression, &text("A"), 1_001));
+        let mut token = suppression.lock().unwrap();
+        *token = Some(SelfWriteToken {
+            hash: content_hash(&text("A")),
+            expires_at_ms: 2_000,
+        });
+        drop(token);
+        assert!(!consume_suppression(&suppression, &text("B"), 1_000));
+        let mut token = suppression.lock().unwrap();
+        *token = Some(SelfWriteToken {
+            hash: content_hash(&text("A")),
+            expires_at_ms: 2_000,
+        });
+        drop(token);
+        assert!(!consume_suppression(&suppression, &text("A"), 2_001));
+    }
+
+    #[test]
     fn runtime_shutdown_joins_worker_and_releases_storage() {
         let directory = TestDirectory::new("shutdown");
         let storage = test_storage(&directory);
@@ -471,6 +568,7 @@ mod tests {
             Arc::new(|| {}),
             Arc::new(|| 1),
             RETENTION_WRITE_INTERVAL,
+            Arc::new(Mutex::new(None)),
         )
         .expect("spawn shutdown worker");
         let runtime_storage: StorageHandle = storage.clone();

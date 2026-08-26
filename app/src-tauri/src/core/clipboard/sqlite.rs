@@ -334,6 +334,45 @@ impl ClipboardStorage for SqliteClipboardStorage {
         )? > 0)
     }
 
+    fn mark_used(&self, id: i64, now_ms: i64) -> Result<bool, StorageError> {
+        let connection = self.lock_connection()?;
+        Ok(connection.execute(
+            "UPDATE clipboard_items SET last_used_at_ms = MAX(last_used_at_ms, ?1) WHERE id = ?2",
+            params![now_ms, id],
+        )? > 0)
+    }
+
+    fn image_rgba8(&self, id: i64) -> Result<Option<(u32, u32, Vec<u8>)>, StorageError> {
+        let Some(item) = self.get(id)? else {
+            return Ok(None);
+        };
+        if item.kind != ClipboardKind::Image {
+            return Err(StorageError::InvalidData(
+                "clipboard item is not an image".into(),
+            ));
+        }
+        let path = item
+            .image_path
+            .ok_or_else(|| StorageError::InvalidData("image item has no managed file".into()))?;
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| is_managed_image_file(value))
+            .ok_or_else(|| StorageError::InvalidData("invalid managed image path".into()))?;
+        if path != self.image_directory.join(file_name) {
+            return Err(StorageError::InvalidData(
+                "managed image path escaped its storage directory".into(),
+            ));
+        }
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let image = image::open(path)
+            .map_err(|error| StorageError::InvalidData(format!("unable to decode image: {error}")))?
+            .into_rgba8();
+        Ok(Some((image.width(), image.height(), image.into_raw())))
+    }
+
     fn image_preview(
         &self,
         id: i64,

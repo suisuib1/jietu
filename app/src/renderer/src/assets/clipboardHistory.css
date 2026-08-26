@@ -473,6 +473,12 @@
   white-space: nowrap;
 }
 
+.history-feedback {
+  padding: 8px 12px;
+  color: var(--history-muted, #6b7280);
+  font-size: 12px;
+}
+
 @media (max-width: 680px) {
   .history-header {
     grid-template-columns: 1fr;
