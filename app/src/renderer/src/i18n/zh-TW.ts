@@ -92,6 +92,7 @@ export const zhTW: Messages = {
     text: '文字',
     html: 'HTML',
     image: '截圖',
-    files: '檔案'
+    files: '檔案',
+    sourceApplication: '來源應用程式'
   }
 }

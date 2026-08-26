@@ -21,6 +21,126 @@ function dataUrl(dataBase64: string): string {
   return `data:image/png;base64,${dataBase64}`
 }
 
+function SearchIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="m15.4 15.4 4.6 4.6"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  )
+}
+
+function TrashIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M5.5 7.5h13M9 7.5V5.7h6v1.8m-8 0 .7 11h7.6l.7-11M10 10.5v5.2m4-5.2v5.2"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  )
+}
+
+function SourceIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect
+        x="3.5"
+        y="4"
+        width="17"
+        height="12"
+        rx="1.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M9 20h6M12 16v4"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.7"
+      />
+    </svg>
+  )
+}
+
+function TypeIcon({ kind }: { kind: ClipboardKind }): React.JSX.Element {
+  if (kind === 'html') {
+    return (
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <path
+          d="m12 8-7 8 7 8M20 8l7 8-7 8M18 5l-4 22"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.2"
+        />
+      </svg>
+    )
+  }
+  if (kind === 'image') {
+    return (
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect
+          x="5"
+          y="6"
+          width="22"
+          height="20"
+          rx="3"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+        <circle cx="12" cy="12" r="2" fill="currentColor" />
+        <path
+          d="m7 23 6-6 4 4 3-3 5 5"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    )
+  }
+  if (kind === 'files') {
+    return (
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <path
+          d="M6 10a3 3 0 0 1 3-3h5l3 3h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"
+          fill="none"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path
+        d="M7 8h18M7 14h18M7 20h12"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2.2"
+      />
+    </svg>
+  )
+}
+
 function isTextInput(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
@@ -63,18 +183,13 @@ function HistoryThumbnail({ item }: { item: ClipboardHistorySummary }): React.JS
   if (item.kind === 'image') {
     return (
       <div ref={ref} className="history-row__visual history-row__visual--image">
-        {preview ? <img src={preview} alt="" /> : <span>IMG</span>}
+        {preview ? <img src={preview} alt="" /> : <TypeIcon kind="image" />}
       </div>
     )
   }
-  const symbol: Record<Exclude<ClipboardKind, 'image'>, string> = {
-    text: 'T',
-    html: '<>',
-    files: 'FILE'
-  }
   return (
     <div className={`history-row__visual history-row__visual--${item.kind}`}>
-      {symbol[item.kind]}
+      <TypeIcon kind={item.kind} />
     </div>
   )
 }
@@ -97,7 +212,7 @@ function ClipboardHistory(): React.JSX.Element {
   const searchRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const rowRefs = useRef(new Map<number, HTMLButtonElement>())
+  const rowRefs = useRef(new Map<number, HTMLDivElement>())
   const requestGeneration = useRef(0)
 
   const selectedItem = useMemo(
@@ -238,7 +353,9 @@ function ClipboardHistory(): React.JSX.Element {
     try {
       const outcome = await window.api.quickPaste(id)
       if (outcome.kind === 'copiedOnly') {
-        state.setFeedback(outcome.reason === 'accessibilityRequired' ? 'accessibilityRequired' : 'copiedOnly')
+        state.setFeedback(
+          outcome.reason === 'accessibilityRequired' ? 'accessibilityRequired' : 'copiedOnly'
+        )
       }
       if (outcome.kind === 'failed') state.setFeedback('failed')
     } catch {
@@ -378,7 +495,9 @@ function ClipboardHistory(): React.JSX.Element {
       <header className="history-header">
         <div className="history-header__title">{history.title}</div>
         <label className="history-search">
-          <span aria-hidden="true">⌕</span>
+          <span aria-hidden="true">
+            <SearchIcon />
+          </span>
           <input
             ref={searchRef}
             value={query}
@@ -387,6 +506,9 @@ function ClipboardHistory(): React.JSX.Element {
             aria-label={history.searchPlaceholder}
             spellCheck={false}
           />
+          <kbd aria-hidden="true">
+            {navigator.userAgent.toLowerCase().includes('mac') ? '⌘ F' : 'Ctrl F'}
+          </kbd>
         </label>
       </header>
       <div className="history-content">
@@ -399,37 +521,48 @@ function ClipboardHistory(): React.JSX.Element {
               </div>
             ) : (
               items.map((item) => (
-                <button
+                <div
                   key={item.id}
                   ref={(element) => {
                     if (element) rowRefs.current.set(item.id, element)
                     else rowRefs.current.delete(item.id)
                   }}
-                  type="button"
                   role="option"
+                  tabIndex={-1}
                   aria-selected={item.id === selectedId}
-                  className={`history-row${item.id === selectedId ? ' is-selected' : ''}`}
+                  aria-busy={pasting && item.id === selectedId}
+                  className={`history-row${item.id === selectedId ? ' is-selected' : ''}${pasting && item.id === selectedId ? ' is-pasting' : ''}`}
                   onClick={() => useClipboardHistoryStore.getState().setSelectedId(item.id)}
                 >
                   <HistoryThumbnail item={item} />
                   <span className="history-row__body">
                     <span className="history-row__topline">
-                      <span className="history-row__kind">{kindLabel(item.kind)}</span>
+                      <span className={`history-row__kind history-row__kind--${item.kind}`}>
+                        {kindLabel(item.kind)}
+                      </span>
                       <time>{relativeTime(item.lastUsedAtMs)}</time>
                     </span>
                     <span className="history-row__preview">
                       {item.previewText || kindLabel(item.kind)}
+                      {item.kind === 'files' && item.fileCount > 1 ? ` +${item.fileCount - 1}` : ''}
                     </span>
                     {item.sourceApplication && (
                       <span className="history-row__source">{item.sourceApplication}</span>
                     )}
                   </span>
-                  {item.isFavorite && (
-                    <span className="history-row__favorite" aria-hidden="true">
-                      ★
-                    </span>
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    className={`history-row__favorite${item.isFavorite ? ' is-favorite' : ''}`}
+                    title={item.isFavorite ? history.unfavorite : history.favorite}
+                    aria-label={item.isFavorite ? history.unfavorite : history.favorite}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void toggleFavorite(item)
+                    }}
+                  >
+                    {item.isFavorite ? '★' : '☆'}
+                  </button>
+                </div>
               ))
             )}
             {loading && <div className="history-list__loading" />}
@@ -440,7 +573,14 @@ function ClipboardHistory(): React.JSX.Element {
           <header className="history-preview__header">
             <div>
               <span>{selectedItem ? kindLabel(selectedItem.kind) : history.preview}</span>
-              {selectedItem?.kind === 'html' && <small>HTML</small>}
+              {selectedItem && (
+                <small
+                  className={`history-preview__badge history-preview__badge--${selectedItem.kind}`}
+                >
+                  <TypeIcon kind={selectedItem.kind} />
+                  {kindLabel(selectedItem.kind)}
+                </small>
+              )}
             </div>
             {selectedItem && (
               <div className="history-preview__actions">
@@ -459,7 +599,7 @@ function ClipboardHistory(): React.JSX.Element {
                   aria-label={history.delete}
                   onClick={() => void deleteItem(selectedItem.id)}
                 >
-                  ×
+                  <TrashIcon />
                 </button>
               </div>
             )}
@@ -475,7 +615,11 @@ function ClipboardHistory(): React.JSX.Element {
             </div>
           )}
           {selectedDetail?.sourceApplication && (
-            <footer className="history-preview__footer">{selectedDetail.sourceApplication}</footer>
+            <footer className="history-preview__footer">
+              <SourceIcon />
+              <span>{history.sourceApplication}</span>
+              <strong>{selectedDetail.sourceApplication}</strong>
+            </footer>
           )}
         </section>
       </div>

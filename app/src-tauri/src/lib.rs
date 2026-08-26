@@ -49,8 +49,8 @@ const DEFAULT_SHORTCUT_MAC: &str = "Alt+A";
 const DEFAULT_SHORTCUT_WINDOWS: &str = "Control+Shift+A";
 const HISTORY_SHORTCUT: &str = "Alt+V";
 const HISTORY_WINDOW_LABEL: &str = "clipboard-history";
-const HISTORY_WINDOW_WIDTH: f64 = 820.0;
-const HISTORY_WINDOW_HEIGHT: f64 = 540.0;
+const HISTORY_WINDOW_WIDTH: f64 = 1080.0;
+const HISTORY_WINDOW_HEIGHT: f64 = 680.0;
 const HISTORY_SHORTCUT_DEBOUNCE: Duration = Duration::from_millis(150);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -534,7 +534,7 @@ fn build_clipboard_history_window(app: &AppHandle) -> Result<(), String> {
     )
     .title("Clipboard History")
     .inner_size(HISTORY_WINDOW_WIDTH, HISTORY_WINDOW_HEIGHT)
-    .min_inner_size(640.0, 420.0)
+    .min_inner_size(900.0, 560.0)
     .decorations(false)
     .transparent(true)
     .shadow(true)

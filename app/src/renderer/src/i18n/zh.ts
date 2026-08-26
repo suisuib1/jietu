@@ -92,6 +92,7 @@ export const zh: Messages = {
     text: '文字',
     html: 'HTML',
     image: '截图',
-    files: '文件'
+    files: '文件',
+    sourceApplication: '来源应用'
   }
 }

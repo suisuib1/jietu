@@ -91,6 +91,7 @@ export interface Messages {
     html: string
     image: string
     files: string
+    sourceApplication: string
   }
 }
 
@@ -186,6 +187,7 @@ export const en: Messages = {
     text: 'Text',
     html: 'HTML',
     image: 'Screenshot',
-    files: 'Files'
+    files: 'Files',
+    sourceApplication: 'Source application'
   }
 }
