@@ -2013,15 +2013,16 @@ fn quick_paste(
             .mark_used(id, current_time_ms())
             .map_err(|error| error.to_string())?;
         let _ = app.emit("clipboard-history-changed", ());
-        hide_clipboard_history_window(&app)?;
         if !crate::platform::macos::paste::accessibility_trusted(false) {
             if !state.accessibility_prompted.swap(true, Ordering::AcqRel) {
                 let _ = crate::platform::macos::paste::accessibility_trusted(true);
             }
+            hide_clipboard_history_window(&app)?;
             return Ok(QuickPasteOutcome::CopiedOnly {
                 reason: "accessibility_required".into(),
             });
         }
+        hide_clipboard_history_window(&app)?;
         let target = state.previous_paste_target.lock().unwrap().clone();
         let Some(PreviousPasteTarget::Mac(target)) = target else {
             return Ok(QuickPasteOutcome::CopiedOnly {
