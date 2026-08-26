@@ -176,7 +176,7 @@ export const en: Messages = {
     unavailable: 'Clipboard history is temporarily unavailable',
     operationError: 'Clipboard history could not be loaded',
     pasteFailed: 'Could not restore clipboard content',
-    pasteCopiedOnly: 'Copied. Press Ctrl+V to paste.',
+    pasteCopiedOnly: 'Copied. Press {pasteShortcut} to paste.',
     pasteAccessibilityRequired: 'Copied. Enable Accessibility permission to paste automatically.',
     imageUnavailable: 'Image unavailable',
     preview: 'Preview',

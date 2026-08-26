@@ -82,7 +82,7 @@ export const zhTW: Messages = {
     unavailable: '剪貼簿記錄暫時無法使用',
     operationError: '無法載入剪貼簿記錄',
     pasteFailed: '恢復剪貼簿內容失敗',
-    pasteCopiedOnly: '已複製，請手動按 Ctrl+V',
+    pasteCopiedOnly: '已複製，請手動按 {pasteShortcut}',
     pasteAccessibilityRequired: '已複製。開啟輔助功能權限後可自動貼上。',
     imageUnavailable: '圖片無法使用',
     preview: '預覽',

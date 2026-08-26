@@ -69,10 +69,20 @@ export interface ClipboardHistoryImagePreview {
   height: number
 }
 
+export type QuickPasteReason =
+  | 'clipboardRestoreFailed'
+  | 'targetUnavailable'
+  | 'targetActivationFailed'
+  | 'accessibilityRequired'
+  | 'inputInjectionFailed'
+  | 'eventCreationFailed'
+  | 'historyUpdateFailed'
+  | 'historyWindowFailed'
+
 export type QuickPasteOutcome =
   | { kind: 'pasted' }
-  | { kind: 'copiedOnly'; reason: string }
-  | { kind: 'failed'; reason: string }
+  | { kind: 'copiedOnly'; reason: QuickPasteReason }
+  | { kind: 'failed'; reason: QuickPasteReason }
 
 export interface Api {
   closeOverlay: () => void

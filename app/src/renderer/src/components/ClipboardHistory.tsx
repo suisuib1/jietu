@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ClipboardHistoryDetail, ClipboardHistorySummary, ClipboardKind } from '../api'
+import { pasteShortcutLabel } from '../platformPresentation'
 import {
   adjacentSelection,
   useClipboardHistoryStore,
@@ -237,7 +238,7 @@ function ClipboardHistory(): React.JSX.Element {
     try {
       const outcome = await window.api.quickPaste(id)
       if (outcome.kind === 'copiedOnly') {
-        state.setFeedback(outcome.reason === 'accessibility_required' ? 'accessibilityRequired' : 'copiedOnly')
+        state.setFeedback(outcome.reason === 'accessibilityRequired' ? 'accessibilityRequired' : 'copiedOnly')
       }
       if (outcome.kind === 'failed') state.setFeedback('failed')
     } catch {
@@ -464,7 +465,15 @@ function ClipboardHistory(): React.JSX.Element {
             )}
           </header>
           <div className="history-preview__content">{renderPreview(selectedDetail)}</div>
-          {feedback && <div className="history-feedback">{feedback === 'failed' ? history.pasteFailed : feedback === 'accessibilityRequired' ? history.pasteAccessibilityRequired : history.pasteCopiedOnly}</div>}
+          {feedback && (
+            <div className="history-feedback">
+              {feedback === 'failed'
+                ? history.pasteFailed
+                : feedback === 'accessibilityRequired'
+                  ? history.pasteAccessibilityRequired
+                  : history.pasteCopiedOnly.replace('{pasteShortcut}', pasteShortcutLabel())}
+            </div>
+          )}
           {selectedDetail?.sourceApplication && (
             <footer className="history-preview__footer">{selectedDetail.sourceApplication}</footer>
           )}

@@ -3,6 +3,7 @@ mod platform;
 mod runtime;
 
 use core::capture::{Rect, nearest_screen, screen_geometry_score, select_screen_containing_point};
+use core::clipboard::{QuickPasteOutcome, QuickPasteReason};
 use core::image::{image_is_blank, png_bytes};
 use core::scroll::*;
 
@@ -121,14 +122,6 @@ struct AppState {
     previous_paste_target: Mutex<Option<PreviousPasteTarget>>,
     #[cfg(target_os = "macos")]
     accessibility_prompted: std::sync::atomic::AtomicBool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-enum QuickPasteOutcome {
-    Pasted,
-    CopiedOnly { reason: String },
-    Failed { reason: String },
 }
 
 #[derive(Debug)]
@@ -1929,125 +1922,165 @@ fn quick_paste(
     state: State<'_, AppState>,
     clipboard: State<'_, ClipboardRuntimeState>,
     id: i64,
-) -> Result<QuickPasteOutcome, String> {
+) -> QuickPasteOutcome {
     #[cfg(target_os = "windows")]
     {
-        let service = clipboard
-            .history_service()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "history_unavailable".to_owned())?;
-        let Some((item, payload)) = service.restore_payload(id).map_err(|error| {
-            eprintln!("QuickPaste payload restore failed for item {id}: {error}");
-            "clipboard_restore_failed".to_owned()
-        })?
-        else {
-            return Err("clipboard_restore_failed".to_owned());
+        let service = match clipboard.history_service() {
+            Ok(Some(service)) => service,
+            _ => {
+                return QuickPasteOutcome::Failed {
+                    reason: QuickPasteReason::ClipboardRestoreFailed,
+                };
+            }
         };
-        clipboard
+        let Some((item, payload)) = (match service.restore_payload(id) {
+            Ok(payload) => payload,
+            Err(_) => {
+                return QuickPasteOutcome::Failed {
+                    reason: QuickPasteReason::ClipboardRestoreFailed,
+                };
+            }
+        }) else {
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::ClipboardRestoreFailed,
+            };
+        };
+        if clipboard
             .register_self_write(item.hash.clone(), current_time_ms())
-            .map_err(|error| error.to_string())?;
-        if let Err(error) = crate::platform::windows::paste::write_clipboard(&payload) {
+            .is_err()
+        {
             let _ = clipboard.clear_self_write();
-            eprintln!("QuickPaste clipboard write failed for item {id}: {error:?}");
-            return Ok(QuickPasteOutcome::Failed {
-                reason: "clipboard_restore_failed".into(),
-            });
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::ClipboardRestoreFailed,
+            };
         }
-        service
-            .mark_used(id, current_time_ms())
-            .map_err(|error| error.to_string())?;
+        if crate::platform::windows::paste::write_clipboard(&payload).is_err() {
+            let _ = clipboard.clear_self_write();
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::ClipboardRestoreFailed,
+            };
+        }
+        if service.mark_used(id, current_time_ms()).is_err() {
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::HistoryUpdateFailed,
+            };
+        }
         let _ = app.emit("clipboard-history-changed", ());
-        hide_clipboard_history_window(&app)?;
+        if hide_clipboard_history_window(&app).is_err() {
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::HistoryWindowFailed,
+            };
+        }
         let target = state.previous_paste_target.lock().unwrap().clone();
         let Some(PreviousPasteTarget::Windows(target)) = target.filter(|target| {
             matches!(target, PreviousPasteTarget::Windows(value) if crate::platform::windows::paste::valid_target(*value, None))
         }) else {
-            return Ok(QuickPasteOutcome::CopiedOnly {
-                reason: "target_unavailable".into(),
-            });
+            return QuickPasteOutcome::CopiedOnly { reason: QuickPasteReason::TargetUnavailable };
         };
         if !crate::platform::windows::paste::restore_foreground(target, Duration::from_millis(300))
         {
-            return Ok(QuickPasteOutcome::CopiedOnly {
-                reason: "focus_restore_failed".into(),
-            });
+            return QuickPasteOutcome::CopiedOnly {
+                reason: QuickPasteReason::TargetActivationFailed,
+            };
         }
         if crate::platform::windows::paste::send_ctrl_v().is_err() {
-            return Ok(QuickPasteOutcome::CopiedOnly {
-                reason: "input_injection_failed".into(),
-            });
+            return QuickPasteOutcome::CopiedOnly {
+                reason: QuickPasteReason::InputInjectionFailed,
+            };
         }
-        return Ok(QuickPasteOutcome::Pasted);
+        QuickPasteOutcome::Pasted
     }
     #[cfg(target_os = "macos")]
     {
-        let service = clipboard
-            .history_service()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "history_unavailable".to_owned())?;
-        let Some((item, payload)) = service.restore_payload(id).map_err(|error| {
-            eprintln!("QuickPaste payload restore failed for item {id}: {error}");
-            "clipboard_restore_failed".to_owned()
-        })?
-        else {
-            return Err("clipboard_restore_failed".to_owned());
+        let service = match clipboard.history_service() {
+            Ok(Some(service)) => service,
+            _ => {
+                return QuickPasteOutcome::Failed {
+                    reason: QuickPasteReason::ClipboardRestoreFailed,
+                };
+            }
+        };
+        let Some((item, payload)) = (match service.restore_payload(id) {
+            Ok(payload) => payload,
+            Err(_) => {
+                return QuickPasteOutcome::Failed {
+                    reason: QuickPasteReason::ClipboardRestoreFailed,
+                };
+            }
+        }) else {
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::ClipboardRestoreFailed,
+            };
         };
         let write_result = crate::platform::macos::logic::with_registered_suppression(
             || {
                 clipboard
                     .register_self_write(item.hash.clone(), current_time_ms())
-                    .map_err(|error| error.to_string())
+                    .map_err(|_| ())
             },
-            || {
-                crate::platform::macos::paste::write_clipboard(&payload)
-                    .map_err(|error| format!("{error:?}"))
-            },
+            || crate::platform::macos::paste::write_clipboard(&payload).map_err(|_| ()),
         );
         if write_result.is_err() {
             let _ = clipboard.clear_self_write();
-            return Ok(QuickPasteOutcome::Failed {
-                reason: "clipboard_restore_failed".into(),
-            });
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::ClipboardRestoreFailed,
+            };
         }
-        service
-            .mark_used(id, current_time_ms())
-            .map_err(|error| error.to_string())?;
+        if service.mark_used(id, current_time_ms()).is_err() {
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::HistoryUpdateFailed,
+            };
+        }
         let _ = app.emit("clipboard-history-changed", ());
         if !crate::platform::macos::paste::accessibility_trusted(false) {
             if !state.accessibility_prompted.swap(true, Ordering::AcqRel) {
                 let _ = crate::platform::macos::paste::accessibility_trusted(true);
             }
-            hide_clipboard_history_window(&app)?;
-            return Ok(QuickPasteOutcome::CopiedOnly {
-                reason: "accessibility_required".into(),
-            });
+            if hide_clipboard_history_window(&app).is_err() {
+                return QuickPasteOutcome::Failed {
+                    reason: QuickPasteReason::HistoryWindowFailed,
+                };
+            }
+            return QuickPasteOutcome::CopiedOnly {
+                reason: QuickPasteReason::AccessibilityRequired,
+            };
         }
-        hide_clipboard_history_window(&app)?;
+        if hide_clipboard_history_window(&app).is_err() {
+            return QuickPasteOutcome::Failed {
+                reason: QuickPasteReason::HistoryWindowFailed,
+            };
+        }
         let target = state.previous_paste_target.lock().unwrap().clone();
         let Some(PreviousPasteTarget::Mac(target)) = target else {
-            return Ok(QuickPasteOutcome::CopiedOnly {
-                reason: "target_unavailable".into(),
-            });
+            return QuickPasteOutcome::CopiedOnly {
+                reason: QuickPasteReason::TargetUnavailable,
+            };
         };
         if !crate::platform::macos::paste::activate_target(&target) {
-            return Ok(QuickPasteOutcome::CopiedOnly {
-                reason: "target_activation_failed".into(),
-            });
+            return QuickPasteOutcome::CopiedOnly {
+                reason: QuickPasteReason::TargetActivationFailed,
+            };
         }
-        if crate::platform::macos::paste::send_command_v().is_err() {
-            return Ok(QuickPasteOutcome::CopiedOnly {
-                reason: "input_injection_failed".into(),
-            });
+        if let Err(error) = crate::platform::macos::paste::send_command_v() {
+            return QuickPasteOutcome::CopiedOnly {
+                reason: match error {
+                    crate::platform::macos::paste::MacPasteError::EventCreation => {
+                        QuickPasteReason::EventCreationFailed
+                    }
+                    _ => QuickPasteReason::InputInjectionFailed,
+                },
+            };
         }
-        return Ok(QuickPasteOutcome::Pasted);
+        QuickPasteOutcome::Pasted
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = (app, state, clipboard, id);
-        Err("quick_paste_unavailable".to_owned())
+        QuickPasteOutcome::Failed {
+            reason: QuickPasteReason::ClipboardRestoreFailed,
+        }
     }
 }
-
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
