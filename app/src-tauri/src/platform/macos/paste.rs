@@ -51,45 +51,48 @@ pub(crate) fn write_clipboard(payload: &ClipboardRestorePayload) -> Result<(), M
             return Err(MacPasteError::ClipboardWrite);
         }
 
-        let ok = match payload {
-            ClipboardRestorePayload::Text(text) => {
-                let value = NSString::from_str(text);
-                pasteboard.setString_forType(&value, &NSPasteboardTypeString)
-            }
-            ClipboardRestorePayload::Html { html, text } => {
-                let html_value = NSString::from_str(html);
-                let text_value = NSString::from_str(text);
-                pasteboard.setString_forType(&html_value, &NSPasteboardTypeHTML)
-                    && pasteboard.setString_forType(&text_value, &NSPasteboardTypeString)
-            }
-            ClipboardRestorePayload::Image {
-                width,
-                height,
-                rgba8,
-            } => {
-                let Some(image) = image::RgbaImage::from_raw(*width, *height, rgba8.clone()) else {
-                    return Err(MacPasteError::ClipboardWrite);
-                };
-                let mut encoded = std::io::Cursor::new(Vec::new());
-                image::DynamicImage::ImageRgba8(image)
-                    .write_to(&mut encoded, image::ImageFormat::Png)
-                    .map_err(|_| MacPasteError::ClipboardWrite)?;
-                let data = NSData::with_bytes(encoded.get_ref());
-                pasteboard.setData_forType(Some(&data), &NSPasteboardTypePNG)
-            }
-            ClipboardRestorePayload::Files(files) => {
-                if files.is_empty() {
-                    false
-                } else {
-                    let objects = files
-                        .iter()
-                        .map(|path| {
-                            let path_value = NSString::from_str(path);
-                            ProtocolObject::from_retained(NSURL::fileURLWithPath(&path_value))
-                        })
-                        .collect::<Vec<_>>();
-                    let objects = NSArray::from_retained_slice(&objects);
-                    pasteboard.writeObjects(&objects)
+        let ok = unsafe {
+            match payload {
+                ClipboardRestorePayload::Text(text) => {
+                    let value = NSString::from_str(text);
+                    pasteboard.setString_forType(&value, &NSPasteboardTypeString)
+                }
+                ClipboardRestorePayload::Html { html, text } => {
+                    let html_value = NSString::from_str(html);
+                    let text_value = NSString::from_str(text);
+                    pasteboard.setString_forType(&html_value, &NSPasteboardTypeHTML)
+                        && pasteboard.setString_forType(&text_value, &NSPasteboardTypeString)
+                }
+                ClipboardRestorePayload::Image {
+                    width,
+                    height,
+                    rgba8,
+                } => {
+                    let Some(image) = image::RgbaImage::from_raw(*width, *height, rgba8.clone())
+                    else {
+                        return Err(MacPasteError::ClipboardWrite);
+                    };
+                    let mut encoded = std::io::Cursor::new(Vec::new());
+                    image::DynamicImage::ImageRgba8(image)
+                        .write_to(&mut encoded, image::ImageFormat::Png)
+                        .map_err(|_| MacPasteError::ClipboardWrite)?;
+                    let data = NSData::with_bytes(encoded.get_ref());
+                    pasteboard.setData_forType(Some(&data), &NSPasteboardTypePNG)
+                }
+                ClipboardRestorePayload::Files(files) => {
+                    if files.is_empty() {
+                        false
+                    } else {
+                        let objects = files
+                            .iter()
+                            .map(|path| {
+                                let path_value = NSString::from_str(path);
+                                ProtocolObject::from_retained(NSURL::fileURLWithPath(&path_value))
+                            })
+                            .collect::<Vec<_>>();
+                        let objects = NSArray::from_retained_slice(&objects);
+                        pasteboard.writeObjects(&objects)
+                    }
                 }
             }
         };
