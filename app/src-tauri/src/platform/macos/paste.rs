@@ -115,8 +115,8 @@ pub(crate) fn activate_target(target: &MacPasteTarget) -> bool {
             return false;
         }
         if let Some(expected) = &target.bundle_identifier {
-            if app.bundleIdentifier().map(|id| id.to_string()).as_deref() != Some(expected.as_str())
-            {
+            let actual = app.bundleIdentifier().map(|id| id.to_string());
+            if !super::logic::bundle_matches(Some(expected.as_str()), actual.as_deref()) {
                 return false;
             }
         }

@@ -1992,8 +1992,19 @@ fn quick_paste(
         else {
             return Err("clipboard_restore_failed".to_owned());
         };
-        clipboard.register_self_write(item.hash.clone(), current_time_ms());
-        if crate::platform::macos::paste::write_clipboard(&payload).is_err() {
+        let write_result = crate::platform::macos::logic::with_registered_suppression(
+            || {
+                clipboard
+                    .register_self_write(item.hash.clone(), current_time_ms())
+                    .map_err(|error| error.to_string())
+            },
+            || {
+                crate::platform::macos::paste::write_clipboard(&payload)
+                    .map_err(|error| format!("{error:?}"))
+            },
+        );
+        if write_result.is_err() {
+            let _ = clipboard.clear_self_write();
             return Ok(QuickPasteOutcome::Failed {
                 reason: "clipboard_restore_failed".into(),
             });
