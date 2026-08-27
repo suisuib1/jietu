@@ -569,7 +569,7 @@ fn build_clipboard_history_window(app: &AppHandle) -> Result<(), String> {
     .min_inner_size(900.0, 560.0)
     .decorations(false)
     .transparent(true)
-    .shadow(true)
+    .shadow(false)
     .resizable(false)
     .always_on_top(true)
     .skip_taskbar(true)
