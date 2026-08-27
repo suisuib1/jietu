@@ -6,6 +6,7 @@ use core::capture::{Rect, nearest_screen, screen_geometry_score, select_screen_c
 use core::clipboard::{QuickPasteOutcome, QuickPasteReason};
 use core::image::{image_is_blank, png_bytes};
 use core::scroll::*;
+use core::{ImagePinPayload, PinManager};
 
 use std::{
     borrow::Cow,
@@ -125,7 +126,7 @@ enum PreviousPasteTarget {
 struct AppState {
     settings: Mutex<AppSettings>,
     capture: Mutex<Option<CaptureData>>,
-    pin_data: Mutex<Option<Vec<u8>>>,
+    pin_manager: Mutex<PinManager>,
     registered_shortcut: Mutex<Option<String>>,
     shortcut_suspended: AtomicBool,
     history_shortcut_last_trigger: Mutex<Option<Instant>>,
@@ -713,36 +714,46 @@ fn register_history_shortcut(app: &AppHandle) -> Result<(), String> {
 
 fn build_pin_window(
     app: &AppHandle,
+    pin_id: &str,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
-) -> Result<(), String> {
-    WebviewWindowBuilder::new(app, "pin", WebviewUrl::App("index.html?view=pin".into()))
-        .title("JieOne")
-        .position(x, y)
-        .inner_size(width, height)
-        .min_inner_size(60.0, 60.0)
-        .decorations(false)
-        .transparent(true)
-        .shadow(true)
-        .resizable(true)
-        .always_on_top(true)
-        .visible(false)
-        .build()
-        .map(|_| ())
-        .map_err(|error| error.to_string())
-}
-
-#[cfg(target_os = "windows")]
-fn prewarm_pin_window(app: &AppHandle) {
-    if app.get_webview_window("pin").is_none() {
-        if let Err(error) = build_pin_window(app, 0.0, 0.0, 60.0, 60.0) {
-            eprintln!("Unable to prewarm pin window: {error}");
+) -> Result<tauri::WebviewWindow, String> {
+    let label = format!("pin-image-{pin_id}");
+    let window = WebviewWindowBuilder::new(
+        app,
+        label,
+        WebviewUrl::App(format!("index.html?view=pin&pinId={pin_id}").into()),
+    )
+    .title("JieOne")
+    .position(x, y)
+    .inner_size(width, height)
+    .min_inner_size(140.0, 100.0)
+    .decorations(false)
+    .transparent(true)
+    .shadow(true)
+    .resizable(true)
+    .always_on_top(true)
+    .visible_on_all_workspaces(true)
+    .skip_taskbar(true)
+    .visible(false)
+    .build()
+    .map_err(|error| error.to_string())?;
+    let manager_app = app.clone();
+    let manager_pin_id = pin_id.to_owned();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let _ = manager_app
+                .state::<AppState>()
+                .pin_manager
+                .lock()
+                .unwrap()
+                .remove(&manager_pin_id);
         }
-    }
+    });
+    Ok(window)
 }
-
 fn ensure_screen_permission(app: &AppHandle) -> Result<(), StartCaptureError> {
     let permission_was_requested = app
         .state::<AppState>()
@@ -1724,108 +1735,118 @@ fn save_image(app: AppHandle, data: Vec<u8>) -> Result<bool, String> {
     Ok(true)
 }
 
-fn pin_image_impl(app: AppHandle, data: Vec<u8>) -> Result<bool, String> {
-    // Reading the PNG header is enough to size the native window. Fully
-    // decoding a large/long screenshot on Tauri's IPC thread can starve the
-    // Windows event loop, which also prevents Cancel and the global shortcut
-    // from being processed.
+fn open_image_pin(
+    app: &AppHandle,
+    data: Vec<u8>,
+    bounds: Rect,
+    capture: Option<&CaptureData>,
+) -> Result<bool, String> {
     let (pixel_width, pixel_height) = image::io::Reader::new(Cursor::new(&data))
         .with_guessed_format()
         .map_err(|error| error.to_string())?
         .into_dimensions()
         .map_err(|error| error.to_string())?;
-    let capture = app.state::<AppState>().capture.lock().unwrap().clone();
+    if pixel_width == 0 || pixel_height == 0 {
+        return Err("image has invalid dimensions".into());
+    }
     let scale = capture
-        .as_ref()
-        .map(|capture| capture.scale_factor)
+        .map(|value| value.scale_factor)
         .unwrap_or(1.0)
         .max(1.0);
     let natural_width = pixel_width as f64 / scale;
     let natural_height = pixel_height as f64 / scale;
-    let screen_bounds = if let Some(capture) = capture.as_ref() {
-        capture.bounds
-    } else {
-        let info = active_screen(&app)?.display_info;
-        Rect {
-            x: info.x as f64,
-            y: info.y as f64,
-            width: info.width as f64,
-            height: info.height as f64,
-        }
-    };
-    let max_width = (screen_bounds.width - 40.0).max(160.0);
-    let max_height = (screen_bounds.height - 40.0).max(160.0);
+    let max_width = (bounds.width * 0.6).max(160.0);
+    let max_height = (bounds.height * 0.7).max(120.0);
     let fit = (max_width / natural_width)
         .min(max_height / natural_height)
         .min(1.0);
-    let window_width = (natural_width * fit).max(60.0);
-    let window_height = (natural_height * fit).max(60.0);
-    let window_x = screen_bounds.x + (screen_bounds.width - window_width) / 2.0;
-    let window_y = screen_bounds.y + (screen_bounds.height - window_height) / 2.0;
+    let window_width = (natural_width * fit).max(140.0);
+    let window_height = (natural_height * fit).max(100.0);
+    let window_x = (bounds.x + (bounds.width - window_width) / 2.0).clamp(
+        bounds.x,
+        (bounds.x + bounds.width - window_width).max(bounds.x),
+    );
+    let window_y = (bounds.y + (bounds.height - window_height) / 2.0).clamp(
+        bounds.y,
+        (bounds.y + bounds.height - window_height).max(bounds.y),
+    );
+    let pin_id = {
+        let state = app.state::<AppState>();
+        let mut manager = state.pin_manager.lock().unwrap();
+        manager.create_image(ImagePinPayload {
+            png: data,
+            width: pixel_width,
+            height: pixel_height,
+        })
+    };
+    let window = match build_pin_window(
+        app,
+        &pin_id,
+        window_x,
+        window_y,
+        window_width,
+        window_height,
+    ) {
+        Ok(window) => window,
+        Err(error) => {
+            app.state::<AppState>()
+                .pin_manager
+                .lock()
+                .unwrap()
+                .remove(&pin_id);
+            return Err(error);
+        }
+    };
     #[cfg(target_os = "windows")]
-    let physical_geometry = capture.as_ref().map(|capture| {
+    if let Some(capture) = capture {
         let scale = capture.scale_factor.max(1.0);
-        (
-            capture.physical_origin_x + ((window_x - capture.bounds.x) * scale).round() as i32,
-            capture.physical_origin_y + ((window_y - capture.bounds.y) * scale).round() as i32,
-            (window_width * scale).round().max(1.0) as u32,
-            (window_height * scale).round().max(1.0) as u32,
-        )
-    });
-    *app.state::<AppState>().pin_data.lock().unwrap() = Some(data);
-
-    #[cfg(target_os = "windows")]
-    if app.get_webview_window("pin").is_none() {
-        build_pin_window(&app, window_x, window_y, window_width, window_height)?;
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        if let Some(window) = app.get_webview_window("pin") {
-            let _ = window.close();
-        }
-        build_pin_window(&app, window_x, window_y, window_width, window_height)?;
-    }
-
-    let window = app
-        .get_webview_window("pin")
-        .ok_or_else(|| "Pin window is unavailable".to_string())?;
-    #[cfg(target_os = "windows")]
-    {
-        // Reuse the renderer created during startup. Destroying a WebView2 and
-        // immediately rebuilding another with the same label can deadlock the
-        // Windows UI thread and leave the capture session permanently busy.
-        window.hide().map_err(|error| error.to_string())?;
-        if let Some((x, y, width, height)) = physical_geometry {
-            // A physical window pixel now maps to one captured image pixel.
-            // This also avoids sizing the reused WebView with the DPI of the
-            // monitor where it was prewarmed instead of the capture monitor.
-            window
-                .set_position(tauri::PhysicalPosition::new(x, y))
-                .map_err(|error| error.to_string())?;
-            window
-                .set_size(tauri::PhysicalSize::new(width, height))
-                .map_err(|error| error.to_string())?;
-        } else {
-            window
-                .set_position(tauri::LogicalPosition::new(window_x, window_y))
-                .map_err(|error| error.to_string())?;
-            window
-                .set_size(tauri::LogicalSize::new(window_width, window_height))
-                .map_err(|error| error.to_string())?;
-        }
-        let _ = window.emit("pin-image-updated", ());
+        let physical_x =
+            capture.physical_origin_x + ((window_x - capture.bounds.x) * scale).round() as i32;
+        let physical_y =
+            capture.physical_origin_y + ((window_y - capture.bounds.y) * scale).round() as i32;
+        let physical_width = (window_width * scale).round().max(140.0) as u32;
+        let physical_height = (window_height * scale).round().max(100.0) as u32;
+        window
+            .set_position(tauri::PhysicalPosition::new(physical_x, physical_y))
+            .map_err(|error| error.to_string())?;
+        window
+            .set_size(tauri::PhysicalSize::new(physical_width, physical_height))
+            .map_err(|error| error.to_string())?;
     }
     window.show().map_err(|error| error.to_string())?;
-    close_overlay_impl(&app);
     Ok(true)
+}
+
+fn pin_image_impl(app: AppHandle, data: Vec<u8>) -> Result<bool, String> {
+    let capture = app.state::<AppState>().capture.lock().unwrap().clone();
+    let bounds = capture
+        .as_ref()
+        .map(|value| value.bounds)
+        .unwrap_or_else(|| {
+            active_screen(&app)
+                .map(|screen| Rect {
+                    x: screen.display_info.x as f64,
+                    y: screen.display_info.y as f64,
+                    width: screen.display_info.width as f64,
+                    height: screen.display_info.height as f64,
+                })
+                .unwrap_or(Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1200.0,
+                    height: 800.0,
+                })
+        });
+    let result = open_image_pin(&app, data, bounds, capture.as_ref());
+    if result.is_ok() {
+        close_overlay_impl(&app);
+    }
+    result
 }
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
 async fn pin_image(app: AppHandle, data_base64: String) -> Result<bool, String> {
-    // Decode away from the WebView2/UI thread. Large screenshots must not hold
-    // up Cancel, window events, or the global screenshot shortcut.
     let data = tauri::async_runtime::spawn_blocking(move || {
         BASE64
             .decode(data_base64)
@@ -1843,27 +1864,162 @@ fn pin_image(app: AppHandle, data: Vec<u8>) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn get_pin_image(state: State<AppState>) -> Result<String, String> {
+fn get_pin_image(state: State<AppState>, pin_id: String) -> Result<String, String> {
     state
-        .pin_data
+        .pin_manager
         .lock()
         .unwrap()
-        .as_ref()
-        .map(|data| BASE64.encode(data))
-        .ok_or_else(|| "No pinned image is available".into())
+        .get(&pin_id)
+        .map(|pin| BASE64.encode(&pin.payload.png))
+        .ok_or_else(|| "pin not found".into())
 }
 
 #[tauri::command]
-fn close_pin_window(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("pin") {
-        #[cfg(target_os = "windows")]
-        let _ = window.hide();
-        #[cfg(not(target_os = "windows"))]
-        let _ = window.destroy();
-    }
-    *app.state::<AppState>().pin_data.lock().unwrap() = None;
+fn pin_clipboard_image(
+    app: AppHandle,
+    clipboard: State<ClipboardRuntimeState>,
+    id: i64,
+) -> Result<bool, String> {
+    let service = clipboard
+        .history_service()
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "history_unavailable".to_owned())?;
+    let Some((_item, payload)) = service
+        .restore_payload(id)
+        .map_err(|error| error.to_string())?
+    else {
+        return Err("history item not found".into());
+    };
+    let crate::core::clipboard::ClipboardRestorePayload::Image {
+        width,
+        height,
+        rgba8,
+    } = payload
+    else {
+        return Err("only image history items can be pinned".into());
+    };
+    let image = RgbaImage::from_raw(width, height, rgba8)
+        .ok_or_else(|| "managed image is invalid".to_owned())?;
+    let png = png_bytes(&image)?;
+    let capture = app.state::<AppState>().capture.lock().unwrap().clone();
+    let bounds = if let Some(value) = capture.as_ref() {
+        value.bounds
+    } else {
+        let info = active_screen(&app)?.display_info;
+        Rect {
+            x: info.x as f64,
+            y: info.y as f64,
+            width: info.width as f64,
+            height: info.height as f64,
+        }
+    };
+    open_image_pin(&app, png, bounds, capture.as_ref())
 }
 
+#[tauri::command]
+fn close_pin_window(app: AppHandle, pin_id: String) -> Result<bool, String> {
+    let label = {
+        let state = app.state::<AppState>();
+        let manager = state.pin_manager.lock().unwrap();
+        manager
+            .get(&pin_id)
+            .map(|pin| pin.window_label.clone())
+            .ok_or_else(|| "pin not found".to_owned())?
+    };
+    let Some(window) = app.get_webview_window(&label) else {
+        app.state::<AppState>()
+            .pin_manager
+            .lock()
+            .unwrap()
+            .remove(&pin_id);
+        return Ok(false);
+    };
+    window.destroy().map_err(|error| error.to_string())?;
+    app.state::<AppState>()
+        .pin_manager
+        .lock()
+        .unwrap()
+        .remove(&pin_id);
+    Ok(true)
+}
+
+#[tauri::command]
+fn get_pin_state(state: State<AppState>, pin_id: String) -> Result<serde_json::Value, String> {
+    let manager = state.pin_manager.lock().unwrap();
+    let pin = manager
+        .get(&pin_id)
+        .ok_or_else(|| "pin not found".to_owned())?;
+    Ok(serde_json::json!({ "locked": pin.locked, "opacity": pin.opacity }))
+}
+
+#[tauri::command]
+fn set_pin_locked(app: AppHandle, pin_id: String, locked: bool) -> Result<bool, String> {
+    let state = app.state::<AppState>();
+    let mut manager = state.pin_manager.lock().unwrap();
+    let pin = manager
+        .get_mut(&pin_id)
+        .ok_or_else(|| "pin not found".to_owned())?;
+    pin.locked = locked;
+    if let Some(window) = app.get_webview_window(&pin.window_label) {
+        window
+            .set_resizable(!locked)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(locked)
+}
+
+#[tauri::command]
+fn set_pin_opacity(app: AppHandle, pin_id: String, opacity: f64) -> Result<f64, String> {
+    let bounded = opacity.clamp(0.4, 1.0);
+    let state = app.state::<AppState>();
+    let mut manager = state.pin_manager.lock().unwrap();
+    let pin = manager
+        .get_mut(&pin_id)
+        .ok_or_else(|| "pin not found".to_owned())?;
+    pin.opacity = bounded;
+
+    Ok(bounded)
+}
+
+#[tauri::command]
+fn copy_pin_image(app: AppHandle, pin_id: String) -> Result<bool, String> {
+    let png = app
+        .state::<AppState>()
+        .pin_manager
+        .lock()
+        .unwrap()
+        .get(&pin_id)
+        .map(|pin| pin.payload.png.clone())
+        .ok_or_else(|| "pin not found".to_owned())?;
+    write_clipboard_png(&png)?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn save_pin_image(app: AppHandle, pin_id: String) -> Result<bool, String> {
+    let png = app
+        .state::<AppState>()
+        .pin_manager
+        .lock()
+        .unwrap()
+        .get(&pin_id)
+        .map(|pin| pin.payload.png.clone())
+        .ok_or_else(|| "pin not found".to_owned())?;
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let Some(path) = rfd::FileDialog::new()
+        .set_title("Save Pinned Image")
+        .set_file_name(format!("JieOne-{stamp}.png"))
+        .add_filter("PNG Image", &["png"])
+        .save_file()
+    else {
+        return Ok(false);
+    };
+    fs::write(path, png).map_err(|error| error.to_string())?;
+    Ok(true)
+}
 #[tauri::command]
 fn open_url(url: String) -> Result<bool, String> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
@@ -2148,7 +2304,7 @@ pub fn run() {
         .manage(AppState {
             settings: Mutex::new(load_settings()),
             capture: Mutex::new(None),
-            pin_data: Mutex::new(None),
+            pin_manager: Mutex::new(PinManager::default()),
             registered_shortcut: Mutex::new(None),
             shortcut_suspended: AtomicBool::new(false),
             history_shortcut_last_trigger: Mutex::new(None),
@@ -2229,7 +2385,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 prewarm_scroll_control(app.handle());
-                prewarm_pin_window(app.handle());
+
             }
 
             let shortcut = app.state::<AppState>().settings.lock().unwrap().capture_shortcut.clone();
@@ -2281,7 +2437,13 @@ pub fn run() {
             save_image,
             pin_image,
             get_pin_image,
+            pin_clipboard_image,
             close_pin_window,
+            get_pin_state,
+            set_pin_locked,
+            set_pin_opacity,
+            copy_pin_image,
+            save_pin_image,
             open_url,
             get_settings,
             set_language,
@@ -2313,6 +2475,17 @@ pub fn run() {
             api.prevent_exit();
         }
         tauri::RunEvent::Exit => {
+            let pin_windows = app
+                .state::<AppState>()
+                .pin_manager
+                .lock()
+                .unwrap()
+                .close_all();
+            for pin in pin_windows {
+                if let Some(window) = app.get_webview_window(&pin.window_label) {
+                    let _ = window.destroy();
+                }
+            }
             if let Err(error) = app.state::<ClipboardRuntimeState>().shutdown() {
                 eprintln!("Clipboard runtime shutdown failed: {error}");
             }

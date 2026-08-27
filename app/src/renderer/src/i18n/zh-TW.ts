@@ -98,6 +98,7 @@ export const zhTW: Messages = {
     creamHanddrawn: '奶油手繪',
     bunnyCloud: '兔兔雲朵',
     link: '連結',
-    screenshot: '截圖'
+    screenshot: '截圖',
+    pin: '固定到螢幕'
   }
 }

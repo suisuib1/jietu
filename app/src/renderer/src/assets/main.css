@@ -99,12 +99,16 @@ body,
   margin: -6px 0 0 -6px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 0 1.5px var(--ls-accent), 0 1px 5px rgba(10, 12, 24, 0.35);
+  box-shadow:
+    0 0 0 1.5px var(--ls-accent),
+    0 1px 5px rgba(10, 12, 24, 0.35);
 }
 
 .selection-handle:hover {
   background: var(--ls-accent);
-  box-shadow: 0 0 0 1.5px #fff, 0 1px 5px rgba(10, 12, 24, 0.35);
+  box-shadow:
+    0 0 0 1.5px #fff,
+    0 1px 5px rgba(10, 12, 24, 0.35);
 }
 
 .text-object {
@@ -117,7 +121,9 @@ body,
   cursor: move;
   user-select: none;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 
 .text-object:hover {
@@ -140,7 +146,9 @@ body,
   cursor: move;
   user-select: none;
   line-height: 1;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 
 .emoji-object:hover {
@@ -153,7 +161,11 @@ body,
 }
 
 .emoji-object__glyph {
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', -apple-system, sans-serif;
+  font-family:
+    'Apple Color Emoji',
+    'Segoe UI Emoji',
+    -apple-system,
+    sans-serif;
   pointer-events: none;
   transform: translateY(-0.05em);
 }
@@ -310,7 +322,9 @@ body,
   color: var(--ls-on-glass-dim);
   cursor: pointer;
   padding: 0;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .tb-btn:hover:not(:disabled) {
@@ -394,7 +408,9 @@ body,
   padding: 0;
   cursor: pointer;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .color-swatch:hover:not(:disabled) {
@@ -403,7 +419,9 @@ body,
 
 .color-swatch.is-active {
   transform: scale(1.14);
-  box-shadow: 0 0 0 2px rgba(18, 18, 26, 0.9), 0 0 0 3.5px var(--ls-accent);
+  box-shadow:
+    0 0 0 2px rgba(18, 18, 26, 0.9),
+    0 0 0 3.5px var(--ls-accent);
 }
 
 .color-swatch:disabled {
@@ -491,7 +509,9 @@ body,
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .text-editor__size-btn:hover {
@@ -513,7 +533,9 @@ body,
 }
 
 .text-editor__colors .color-swatch.is-active {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--ls-accent);
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3.5px var(--ls-accent);
 }
 
 .text-editor__input {
@@ -529,7 +551,9 @@ body,
   resize: both;
   outline: none;
   user-select: text;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .text-editor__input:focus {
@@ -554,7 +578,9 @@ body,
   cursor: pointer;
   background: var(--ls-accent);
   color: #fff;
-  transition: background 0.12s ease, opacity 0.12s ease;
+  transition:
+    background 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .settings-btn:hover:not(:disabled) {
@@ -614,7 +640,9 @@ body,
   font-size: 21px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .shortcut-panel__display.is-recording {
@@ -821,4 +849,56 @@ body,
 .pin-wrap:hover .pin-resize,
 .pin-resize:focus-visible {
   opacity: 1;
+}
+.pin-controls {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  background: rgba(20, 22, 28, 0.76);
+  color: #fff;
+  font:
+    12px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.pin-wrap:hover .pin-controls,
+.pin-controls:focus-within {
+  opacity: 1;
+}
+.pin-controls button {
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 7px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pin-controls button:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+.pin-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pin-controls input {
+  width: 68px;
+  accent-color: #8ab4ff;
+}
+.pin-wrap.is-locked {
+  cursor: default;
+}
+.pin-wrap.is-locked::after {
+  border-color: #8ab4ff;
 }

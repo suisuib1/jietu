@@ -98,6 +98,7 @@ export const zh: Messages = {
     creamHanddrawn: '奶油手绘',
     bunnyCloud: '兔兔云朵',
     link: '链接',
-    screenshot: '截图'
+    screenshot: '截图',
+    pin: '固定到屏幕'
   }
 }

@@ -1,151 +1,174 @@
 import { useEffect, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow, PhysicalSize } from '@tauri-apps/api/window'
+
+const pinId = new URLSearchParams(window.location.search).get('pinId') ?? ''
 
 export default function PinImage(): React.JSX.Element {
   const [imageUrl, setImageUrl] = useState('')
-  const imageUrlRef = useRef('')
+  const [locked, setLocked] = useState(false)
+  const [opacity, setOpacity] = useState(1)
   const aspectRatio = useRef(1)
   const correctingSize = useRef(false)
   const userResizing = useRef(false)
   const resizeIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const appWindow = getCurrentWindow()
 
   useEffect(() => {
     let disposed = false
-    let unlisten: (() => void) | undefined
-
-    const refreshImage = async (): Promise<void> => {
-      try {
-        const png = await invoke<string>('get_pin_image')
-        if (disposed) return
-        const nextUrl = `data:image/png;base64,${png}`
-        imageUrlRef.current = nextUrl
-        setImageUrl(nextUrl)
-      } catch {
-        // The Windows pin renderer is prewarmed before an image exists. The
-        // update event below supplies the first image when the user pins one.
-      }
-    }
-
-    // Register first, then request current data. This closes the race between
-    // the hidden prewarmed renderer loading and the first pin operation.
-    void listen('pin-image-updated', () => void refreshImage()).then((off) => {
-      if (disposed) {
-        off()
-        return
-      }
-      unlisten = off
-      void refreshImage()
-    })
-
+    if (!pinId) return
+    void window.api
+      .getPinImage(pinId)
+      .then((png) => {
+        if (!disposed) setImageUrl(`data:image/png;base64,${png}`)
+      })
+      .catch(() => undefined)
+    void window.api
+      .getPinState(pinId)
+      .then((state) => {
+        if (!disposed) {
+          setLocked(state.locked)
+          setOpacity(state.opacity)
+        }
+      })
+      .catch(() => undefined)
     return () => {
       disposed = true
-      unlisten?.()
-      imageUrlRef.current = ''
     }
   }, [])
 
   useEffect(() => {
-    const appWindow = getCurrentWindow()
     let disposed = false
-    let unlisten: (() => void) | undefined
-
     void appWindow
       .onResized(({ payload: size }) => {
-        // Native code also resizes this prewarmed window whenever a new image
-        // is pinned. Only project sizes back to the image ratio while the user
-        // is actively dragging the resize handle; otherwise the previous
-        // image's ratio can overwrite the new screenshot's exact dimensions.
         if (
           disposed ||
+          locked ||
           !userResizing.current ||
           correctingSize.current ||
           aspectRatio.current <= 0
         )
           return
-
         if (resizeIdleTimer.current) clearTimeout(resizeIdleTimer.current)
         resizeIdleTimer.current = setTimeout(() => {
           userResizing.current = false
           resizeIdleTimer.current = null
         }, 180)
-
-        // Project the freely-resized native window back onto the image's
-        // aspect ratio. This remains smooth for corner and edge resizing and
-        // prevents object-fit letterboxing from making the image and window
-        // sizes disagree.
         const ratio = aspectRatio.current
         const projectedHeight = (ratio * size.width + size.height) / (ratio * ratio + 1)
-        const nextHeight = Math.max(projectedHeight, 60, 60 / ratio)
+        const nextHeight = Math.max(projectedHeight, 100, 100 / ratio)
         const nextWidth = ratio * nextHeight
-
         if (Math.abs(nextWidth - size.width) <= 1 && Math.abs(nextHeight - size.height) <= 1) return
         correctingSize.current = true
-        const corrected = new PhysicalSize(Math.round(nextWidth), Math.round(nextHeight))
-        void appWindow.setSize(corrected).finally(() => {
-          correctingSize.current = false
-        })
+        void appWindow
+          .setSize(new PhysicalSize(Math.round(nextWidth), Math.round(nextHeight)))
+          .finally(() => {
+            correctingSize.current = false
+          })
       })
       .then((off) => {
         if (disposed) off()
-        else unlisten = off
       })
-
     return () => {
       disposed = true
-      unlisten?.()
       if (resizeIdleTimer.current) clearTimeout(resizeIdleTimer.current)
       resizeIdleTimer.current = null
       userResizing.current = false
     }
-  }, [])
+  }, [appWindow, locked])
 
   const startDragging = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+    if (locked || event.button !== 0 || (event.target as HTMLElement).closest('button, input'))
+      return
     event.preventDefault()
-    void getCurrentWindow().startDragging()
+    void appWindow.startDragging()
+  }
+
+  const toggleLock = async (): Promise<void> => {
+    const next = !locked
+    try {
+      await window.api.setPinLocked(pinId, next)
+      setLocked(next)
+    } catch {
+      /* keep current state */
+    }
+  }
+
+  const changeOpacity = async (value: number): Promise<void> => {
+    try {
+      const next = await window.api.setPinOpacity(pinId, value)
+      setOpacity(next)
+    } catch {
+      /* keep current state */
+    }
   }
 
   return (
-    <div className="pin-wrap" onPointerDown={startDragging}>
-      {imageUrl ? (
+    <div
+      className={`pin-wrap${locked ? ' is-locked' : ''}`}
+      style={{ opacity }}
+      onPointerDown={startDragging}
+    >
+      {imageUrl && (
         <img
           src={imageUrl}
           draggable={false}
+          alt="Pinned image"
           onLoad={(event) => {
-            const image = event.currentTarget
-            aspectRatio.current = image.naturalWidth / Math.max(1, image.naturalHeight)
+            aspectRatio.current =
+              event.currentTarget.naturalWidth / Math.max(1, event.currentTarget.naturalHeight)
           }}
         />
-      ) : null}
-      <button
-        type="button"
-        className="pin-close"
-        aria-label="Close"
-        title="Close"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => void invoke('close_pin_window')}
-      >
-        ×
-      </button>
-      <button
-        type="button"
-        className="pin-resize"
-        aria-label="Resize"
-        title="Resize"
-        onPointerDown={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          userResizing.current = true
-          if (resizeIdleTimer.current) clearTimeout(resizeIdleTimer.current)
-          void getCurrentWindow()
-            .startResizeDragging('SouthEast')
-            .catch(() => {
+      )}
+      <div className="pin-controls" onPointerDown={(event) => event.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => void toggleLock()}
+          title={locked ? 'Unlock position and size' : 'Lock position and size'}
+        >
+          {locked ? 'Unlock' : 'Lock'}
+        </button>
+        <label title="Opacity">
+          <span>Opacity</span>
+          <input
+            type="range"
+            min="0.4"
+            max="1"
+            step="0.05"
+            value={opacity}
+            onChange={(event) => void changeOpacity(Number(event.target.value))}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void window.api.copyPinImage(pinId)}
+          title="Copy image"
+        >
+          Copy
+        </button>
+        <button type="button" onClick={() => void window.api.savePinImage(pinId)} title="Save PNG">
+          Save
+        </button>
+        <button type="button" onClick={() => void window.api.closePinWindow(pinId)} title="Close">
+          Close
+        </button>
+      </div>
+      {!locked && (
+        <button
+          type="button"
+          className="pin-resize"
+          aria-label="Resize"
+          title="Resize"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            userResizing.current = true
+            if (resizeIdleTimer.current) clearTimeout(resizeIdleTimer.current)
+            void appWindow.startResizeDragging('SouthEast').catch(() => {
               userResizing.current = false
             })
-        }}
-      />
+          }}
+        />
+      )}
     </div>
   )
 }

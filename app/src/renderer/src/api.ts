@@ -104,6 +104,14 @@ export interface Api {
   copyImage: (png: Uint8Array) => Promise<boolean>
   saveImage: (png: Uint8Array) => Promise<boolean>
   pinImage: (png: Uint8Array) => Promise<boolean>
+  pinClipboardImage: (id: number) => Promise<boolean>
+  getPinImage: (pinId: string) => Promise<string>
+  getPinState: (pinId: string) => Promise<{ locked: boolean; opacity: number }>
+  setPinLocked: (pinId: string, locked: boolean) => Promise<boolean>
+  setPinOpacity: (pinId: string, opacity: number) => Promise<number>
+  copyPinImage: (pinId: string) => Promise<boolean>
+  savePinImage: (pinId: string) => Promise<boolean>
+  closePinWindow: (pinId: string) => Promise<boolean>
   openUrl: (url: string) => Promise<boolean>
   getSettings: () => Promise<AppSettings>
   setLanguage: (language: Language) => Promise<AppSettings>
@@ -195,6 +203,14 @@ export const api: Api = {
   // A base64 string avoids both WebView2's unreliable top-level raw IPC and
   // the huge JSON number arrays that originally blocked its window thread.
   // Keep macOS on its already-verified native byte-array command shape.
+  pinClipboardImage: (id) => invoke('pin_clipboard_image', { id }),
+  getPinImage: (pinId) => invoke('get_pin_image', { pinId }),
+  getPinState: (pinId) => invoke('get_pin_state', { pinId }),
+  setPinLocked: (pinId, locked) => invoke('set_pin_locked', { pinId, locked }),
+  setPinOpacity: (pinId, opacity) => invoke('set_pin_opacity', { pinId, opacity }),
+  copyPinImage: (pinId) => invoke('copy_pin_image', { pinId }),
+  savePinImage: (pinId) => invoke('save_pin_image', { pinId }),
+  closePinWindow: (pinId) => invoke('close_pin_window', { pinId }),
   pinImage: async (png) =>
     isWindows
       ? invoke('pin_image', { dataBase64: await pngBase64(png) })

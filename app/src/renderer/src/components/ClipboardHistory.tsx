@@ -67,6 +67,27 @@ function TrashIcon(): React.JSX.Element {
   )
 }
 
+function PinIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="m8 4 8 8m-9-5 5-3 3 3-3 5 4 4m-9-9-3 3 4 4 5-3"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="m12 14-5 5"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  )
+}
 function SourceIcon(): React.JSX.Element {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -378,6 +399,14 @@ function ClipboardHistory(): React.JSX.Element {
     }
   }, [])
 
+  const pinImage = useCallback(async (item: ClipboardHistorySummary): Promise<void> => {
+    if (item.kind !== 'image' || !item.imageAvailable) return
+    try {
+      await window.api.pinClipboardImage(item.id)
+    } catch {
+      useClipboardHistoryStore.getState().setError('operation')
+    }
+  }, [])
   const quickPaste = useCallback(async (id: number): Promise<void> => {
     const state = useClipboardHistoryStore.getState()
     if (state.pasting) return
@@ -432,7 +461,17 @@ function ClipboardHistory(): React.JSX.Element {
       const state = useClipboardHistoryStore.getState()
       const item = state.items.find((candidate) => candidate.id === state.selectedId)
       if (!item) return
-      if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (event.key.toLowerCase() === 'p' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (item.kind === 'image' && item.imageAvailable) {
+          event.preventDefault()
+          void pinImage(item)
+        }
+      } else if (
+        event.key.toLowerCase() === 'f' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
         event.preventDefault()
         void toggleFavorite(item)
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -442,7 +481,7 @@ function ClipboardHistory(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleteItem, quickPaste, toggleFavorite])
+  }, [deleteItem, pinImage, quickPaste, toggleFavorite])
 
   useEffect(() => {
     const root = listRef.current
@@ -642,6 +681,16 @@ function ClipboardHistory(): React.JSX.Element {
             </div>
             {selectedItem && (
               <div className="history-preview__actions">
+                {selectedItem.kind === 'image' && selectedItem.imageAvailable && (
+                  <button
+                    type="button"
+                    title={history.pin}
+                    aria-label={history.pin}
+                    onClick={() => void pinImage(selectedItem)}
+                  >
+                    <PinIcon />
+                  </button>
+                )}
                 <button
                   type="button"
                   title={selectedItem.isFavorite ? history.unfavorite : history.favorite}

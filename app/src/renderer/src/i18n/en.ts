@@ -97,6 +97,7 @@ export interface Messages {
     bunnyCloud: string
     link: string
     screenshot: string
+    pin: string
   }
 }
 
@@ -198,6 +199,7 @@ export const en: Messages = {
     creamHanddrawn: 'Cream handdrawn',
     bunnyCloud: 'Bunny cloud',
     link: 'Link',
-    screenshot: 'Screenshot'
+    screenshot: 'Screenshot',
+    pin: 'Pin on screen'
   }
 }
