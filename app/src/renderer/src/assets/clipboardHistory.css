@@ -13,9 +13,12 @@
   --history-favorite: #e7ad32;
   --history-danger: #d95555;
   --history-shadow: 0 7px 18px rgba(66, 57, 38, 0.08);
+  --history-window-shadow: 0 2px 6px rgba(66, 57, 38, 0.16);
   --history-radius-card: 14px;
   --history-radius-panel: 18px;
   --history-radius-control: 11px;
+  --history-radius-window: 22px;
+  --history-window-inset: 6px;
   --history-decoration-opacity: 0;
   --history-type-text-bg: #e7f5ef;
   --history-type-text: #2d9276;
@@ -45,16 +48,17 @@
   --history-image-bg: #f5f5f0;
   --history-preview-loading: #ebe7dc;
   box-sizing: border-box;
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: var(--history-window-inset);
   overflow: hidden;
   border: 2px solid var(--history-border);
-  border-radius: 20px;
+  border-radius: var(--history-radius-window);
   background: var(--history-bg);
+  background-clip: padding-box;
   color: var(--history-text);
-  box-shadow: var(--history-shadow);
+  box-shadow: var(--history-window-shadow);
   cursor: default;
+  isolation: isolate;
   user-select: none;
 }
 .clipboard-history[data-theme='cream-handdrawn'] {
@@ -72,9 +76,11 @@
   --history-favorite: #e7ad32;
   --history-danger: #d95555;
   --history-shadow: 0 7px 18px rgba(66, 57, 38, 0.08);
+  --history-window-shadow: 0 2px 6px rgba(66, 57, 38, 0.16);
   --history-radius-card: 14px;
   --history-radius-panel: 18px;
   --history-radius-control: 11px;
+  --history-radius-window: 22px;
   --history-decoration-opacity: 0.55;
 }
 .clipboard-history[data-theme='bunny-cloud'] {
@@ -92,9 +98,11 @@
   --history-favorite: #f3b72d;
   --history-danger: #e45a68;
   --history-shadow: 0 10px 24px rgba(96, 125, 183, 0.15);
+  --history-window-shadow: 0 2px 8px rgba(96, 125, 183, 0.22);
   --history-radius-card: 18px;
   --history-radius-panel: 24px;
   --history-radius-control: 14px;
+  --history-radius-window: 26px;
   --history-decoration-opacity: 0.9;
   --history-type-text-bg: #e8f8f5;
   --history-type-text: #238c88;
