@@ -47,6 +47,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 const DEFAULT_SHORTCUT_MAC: &str = "Alt+A";
 const DEFAULT_SHORTCUT_WINDOWS: &str = "Control+Shift+A";
+const DEFAULT_LANGUAGE: &str = "zh";
 const DEFAULT_THEME: &str = "cream-handdrawn";
 const HISTORY_SHORTCUT: &str = "Alt+V";
 const HISTORY_WINDOW_LABEL: &str = "clipboard-history";
@@ -68,7 +69,7 @@ struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            language: "en".into(),
+            language: DEFAULT_LANGUAGE.into(),
             capture_shortcut: if cfg!(target_os = "windows") {
                 DEFAULT_SHORTCUT_WINDOWS.into()
             } else {
@@ -245,7 +246,7 @@ fn load_settings() -> AppSettings {
         return AppSettings::default();
     };
     if !matches!(settings.language.as_str(), "en" | "zh" | "zh-TW") {
-        settings.language = "en".into();
+        settings.language = DEFAULT_LANGUAGE.into();
     }
     settings.capture_shortcut = normalize_shortcut(&settings.capture_shortcut);
     if !is_valid_shortcut(&settings.capture_shortcut) {
@@ -2324,6 +2325,11 @@ pub fn run() {
 mod tests {
     use super::*;
     use image::imageops;
+
+    #[test]
+    fn default_settings_use_simplified_chinese() {
+        assert_eq!(AppSettings::default().language, DEFAULT_LANGUAGE);
+    }
 
     #[test]
     fn theme_values_normalize_to_supported_ids() {

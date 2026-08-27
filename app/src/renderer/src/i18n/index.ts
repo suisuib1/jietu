@@ -8,7 +8,7 @@ export type Language = 'en' | 'zh' | 'zh-TW'
 const catalogs: Record<Language, Messages> = { en, zh, 'zh-TW': zhTW }
 
 export function getMessages(language: Language): Messages {
-  return catalogs[language] ?? en
+  return catalogs[language] ?? zh
 }
 
 export interface I18nContextValue {
@@ -17,8 +17,8 @@ export interface I18nContextValue {
 }
 
 export const I18nContext = createContext<I18nContextValue>({
-  language: 'en',
-  t: en
+  language: 'zh',
+  t: zh
 })
 
 export function useI18n(): I18nContextValue {

@@ -9,7 +9,7 @@ import { getMessages, I18nContext, type Language } from './i18n'
 function App(): React.JSX.Element {
   const hash =
     new URLSearchParams(window.location.search).get('view') ?? window.location.hash.replace('#', '')
-  const [language, setLanguage] = useState<Language>('en')
+  const [language, setLanguage] = useState<Language>('zh')
 
   useEffect(() => {
     document.title = 'JieOne'
