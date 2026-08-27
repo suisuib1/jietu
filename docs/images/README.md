@@ -1,4 +1,4 @@
-# LiteSnap screenshots
+# JieOne screenshots
 
 Drop real product screenshots here and keep these filenames so the root `README.md` gallery stays valid:
 
@@ -13,4 +13,4 @@ Drop real product screenshots here and keep these filenames so the root `README.
 Tips:
 - Prefer 16:9 or ~1600×900 PNG.
 - Hide personal data before capturing.
-- Replace the current placeholder mockups with real LiteSnap UI shots when ready.
+- Replace the current placeholder mockups with real JieOne UI shots when ready.

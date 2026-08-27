@@ -90,15 +90,15 @@ mod tests {
             Some(42),
             7,
             Some("com.apple.Finder"),
-            Some("com.litesnap")
+            Some("com.suisui.jieone")
         ));
         assert!(!target_is_valid(None, 7, None, None));
         assert!(!target_is_valid(Some(7), 7, None, None));
         assert!(!target_is_valid(
             Some(42),
             7,
-            Some("com.litesnap"),
-            Some("com.litesnap")
+            Some("com.suisui.jieone"),
+            Some("com.suisui.jieone")
         ));
         assert!(bundle_matches(
             Some("com.apple.Finder"),

@@ -1,6 +1,7 @@
 use std::{
     error::Error,
-    fmt, io,
+    fmt, fs, io,
+    path::Path,
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
     time::{SystemTime, UNIX_EPOCH},
@@ -21,6 +22,7 @@ type PlatformClipboardWatcher = crate::platform::windows::clipboard::WindowsClip
 const CLIPBOARD_DIRECTORY: &str = "clipboard";
 const RETENTION_WRITE_INTERVAL: usize = 50;
 const HISTORY_CHANGED_EVENT: &str = "clipboard-history-changed";
+const LEGACY_APP_DATA_DIRS: [&str; 2] = ["com.huibinglin.litesnap", "com.litesnap"];
 
 pub(crate) type StorageHandle = Arc<dyn ClipboardStorage>;
 type HistoryNotifier = Arc<dyn Fn() + Send + Sync>;
@@ -98,6 +100,7 @@ impl ClipboardRuntime {
             .app_local_data_dir()
             .map_err(|error| ClipboardRuntimeError::AppDataDirectory(error.to_string()))?
             .join(CLIPBOARD_DIRECTORY);
+        migrate_legacy_data(app, &data_directory);
         let storage: StorageHandle = Arc::new(SqliteClipboardStorage::open(
             data_directory,
             PrivacyPolicy::default(),
@@ -155,6 +158,45 @@ impl ClipboardRuntime {
             None => Ok(()),
         }
     }
+}
+
+fn migrate_legacy_data(app: &AppHandle, destination: &Path) {
+    if destination.exists() {
+        return;
+    }
+    let Ok(current_dir) = app.path().app_local_data_dir() else {
+        return;
+    };
+    let Some(parent) = current_dir.parent() else {
+        return;
+    };
+    for legacy_root in LEGACY_APP_DATA_DIRS.iter().map(|name| parent.join(name)) {
+        let source = legacy_root.join(CLIPBOARD_DIRECTORY);
+        if !source.is_dir() {
+            continue;
+        }
+        if let Err(error) = copy_directory(&source, destination) {
+            eprintln!("Unable to migrate legacy clipboard data: {error}");
+        } else {
+            eprintln!("Migrated legacy clipboard data to the JieOne data directory");
+        }
+        break;
+    }
+}
+
+fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_directory(&source_path, &destination_path)?;
+        } else {
+            fs::copy(source_path, destination_path)?;
+        }
+    }
+    Ok(())
 }
 
 impl Drop for ClipboardRuntime {

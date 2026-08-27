@@ -1,4 +1,4 @@
-# LiteSnap
+# JieOne
 
 A lightweight native screenshot utility built with Tauri 2, Rust, React and TypeScript.
 

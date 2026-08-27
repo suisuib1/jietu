@@ -5,6 +5,6 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>LiteSnap needs Screen Recording permission to capture screenshots.</string>
+    <string>JieOne needs Screen Recording permission to capture screenshots.</string>
   </dict>
 </plist>

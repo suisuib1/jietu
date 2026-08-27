@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
-  "description": "LiteSnap application windows",
+  "description": "JieOne application windows",
   "windows": ["overlay", "shortcut", "scroll-control", "pin", "clipboard-history"],
   "permissions": [
     "core:default",

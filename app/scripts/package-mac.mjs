@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,7 +24,7 @@ const bundleDir = path.join(
   'bundle',
   'macos',
 );
-const appBundlePath = path.join(bundleDir, 'LiteSnap.app');
+const appBundlePath = path.join(bundleDir, 'JieOne.app');
 const outputDir = path.join(rootDir, 'release', 'mac');
 
 if (!fs.existsSync(appBundlePath)) {
@@ -33,7 +34,7 @@ if (!fs.existsSync(appBundlePath)) {
 
 fs.mkdirSync(outputDir, { recursive: true });
 
-const zipPath = path.join(outputDir, `LiteSnap-${version}-${arch}.zip`);
+const zipPath = path.join(outputDir, `JieOne-${version}-${arch}.zip`);
 execFileSync(
   'ditto',
   ['-c', '-k', '--sequesterRsrc', '--keepParent', appBundlePath, zipPath],
@@ -55,11 +56,11 @@ const dmgFiles = fs
 
 if (dmgFiles.length > 0) {
   const dmgSource = dmgFiles[0].fullPath;
-  const dmgPath = path.join(outputDir, `LiteSnap-${version}-${arch}.dmg`);
+  const dmgPath = path.join(outputDir, `JieOne-${version}-${arch}.dmg`);
   fs.copyFileSync(dmgSource, dmgPath);
 }
 
 console.log(`Created: ${zipPath}`);
 if (dmgFiles.length > 0) {
-  console.log(`Copied: ${path.join(outputDir, `LiteSnap-${version}-${arch}.dmg`)}`);
+  console.log(`Copied: ${path.join(outputDir, `JieOne-${version}-${arch}.dmg`)}`);
 }

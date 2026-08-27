@@ -1,12 +1,12 @@
 [package]
-name = "litesnap"
+name = "jieone"
 version = "2.0.1"
-description = "A lightweight native screenshot utility"
-authors = ["LiteSnap"]
+description = "JieOne cross-platform screenshot and clipboard productivity tool"
+authors = ["JieOne"]
 edition = "2024"
 
 [lib]
-name = "litesnap_lib"
+name = "jieone_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

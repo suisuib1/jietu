@@ -2156,6 +2156,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "jieone"
+version = "2.0.1"
+dependencies = [
+ "arboard",
+ "base64 0.22.1",
+ "core-graphics 0.25.0",
+ "directories",
+ "image 0.24.9",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "rfd",
+ "rusqlite",
+ "screenshots",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "jni"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2371,31 +2396,6 @@ name = "litemap"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
-
-[[package]]
-name = "litesnap"
-version = "2.0.1"
-dependencies = [
- "arboard",
- "base64 0.22.1",
- "core-graphics 0.25.0",
- "directories",
- "image 0.24.9",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "rfd",
- "rusqlite",
- "screenshots",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "lock_api"

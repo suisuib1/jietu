@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/images/icon.png" alt="LiteSnap" width="96" />
+<img src="docs/images/icon.png" alt="JieOne" width="96" />
 
-# LiteSnap
+# JieOne
 
 **截圖 · 標註 · 貼螢幕 · 搞定**
 
@@ -12,8 +12,8 @@
 
 <br />
 
-[![Windows](https://img.shields.io/badge/Windows-v2.0.1%20Setup-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/HuibingLin/LiteSnap/releases/download/v2.0.1/LiteSnap_2.0.1_x64-setup.exe)
-[![macOS](https://img.shields.io/badge/macOS-v2.0.1%20Universal%20DMG-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/HuibingLin/LiteSnap/releases/download/v2.0.1/LiteSnap_2.0.1_universal.dmg)
+[![Windows](https://img.shields.io/badge/Windows-v2.0.1%20Setup-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/suisuib1/jietu/releases/download/v2.0.1/JieOne_2.0.1_x64-setup.exe)
+[![macOS](https://img.shields.io/badge/macOS-v2.0.1%20Universal%20DMG-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/suisuib1/jietu/releases/download/v2.0.1/JieOne_2.0.1_universal.dmg)
 [![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](./LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%2F%20macOS-6366f1?style=flat-square)](#下載)
 
@@ -25,15 +25,15 @@
 
 **Windows 與 macOS 現已開放下載。** macOS Universal DMG 已使用 Developer ID 簽署並通過 Apple 公證，同時支援 Apple Silicon 與 Intel Mac，最低支援 macOS 10.15。
 
-最新版：**[v2.0.1](https://github.com/HuibingLin/LiteSnap/releases/tag/v2.0.1)** · [全部版本](https://github.com/HuibingLin/LiteSnap/releases)
+最新版：**[v2.0.1](https://github.com/suisuib1/jietu/releases/tag/v2.0.1)** · [全部版本](https://github.com/suisuib1/jietu/releases)
 
 | 版本 | Windows | macOS | 說明 |
 |:----:|:-------:|:-----:|:-----|
-| **v2.0.1** | [LiteSnap_2.0.1_x64-setup.exe](https://github.com/HuibingLin/LiteSnap/releases/download/v2.0.1/LiteSnap_2.0.1_x64-setup.exe) | [LiteSnap_2.0.1_universal.dmg](https://github.com/HuibingLin/LiteSnap/releases/download/v2.0.1/LiteSnap_2.0.1_universal.dmg) | Windows 貼圖更穩定、取消操作可恢復、適配不同 DPI 的真實尺寸，並正式提供已簽署和公證的 macOS Universal 版本 |
-| v2.0.0 | [LiteSnap_2.0.0_x64-setup.exe](https://github.com/HuibingLin/LiteSnap/releases/download/v2.0.0/LiteSnap_2.0.0_x64-setup.exe) | 稍後上線 | 從 Electron 轉到 Tauri，安裝包更小、啟動更輕 |
-| v1.0.1 | [LiteSnap-1.0.1-setup.exe](https://github.com/HuibingLin/LiteSnap/releases/download/v1.0.1/LiteSnap-1.0.1-setup.exe) | 即將推出 — 如需 macOS 請[提交 Issue](https://github.com/HuibingLin/LiteSnap/issues) | 舊版公開 Windows 版本 |
+| **v2.0.1** | [JieOne_2.0.1_x64-setup.exe](https://github.com/suisuib1/jietu/releases/download/v2.0.1/JieOne_2.0.1_x64-setup.exe) | [JieOne_2.0.1_universal.dmg](https://github.com/suisuib1/jietu/releases/download/v2.0.1/JieOne_2.0.1_universal.dmg) | Windows 貼圖更穩定、取消操作可恢復、適配不同 DPI 的真實尺寸，並正式提供已簽署和公證的 macOS Universal 版本 |
+| v2.0.0 | [JieOne_2.0.0_x64-setup.exe](https://github.com/suisuib1/jietu/releases/download/v2.0.0/JieOne_2.0.0_x64-setup.exe) | 稍後上線 | 從 Electron 轉到 Tauri，安裝包更小、啟動更輕 |
+| v1.0.1 | [JieOne-1.0.1-setup.exe](https://github.com/suisuib1/jietu/releases/download/v1.0.1/JieOne-1.0.1-setup.exe) | 即將推出 — 如需 macOS 請[提交 Issue](https://github.com/suisuib1/jietu/issues) | 舊版公開 Windows 版本 |
 
-> macOS 首次啟動時會要求「螢幕與系統錄音」權限，以便 LiteSnap 擷取螢幕。安裝包已通過 Apple 公證，無需繞過 Gatekeeper 即可正常開啟。
+> macOS 首次啟動時會要求「螢幕與系統錄音」權限，以便 JieOne 擷取螢幕。安裝包已通過 Apple 公證，無需繞過 Gatekeeper 即可正常開啟。
 
 ---
 
@@ -83,7 +83,7 @@
 
 ## 為什麼是 v2.0.0
 
-- Electron 安裝包體積太大，所以 LiteSnap 轉到 Tauri，降低安裝包大小，也讓啟動更輕。
+- Electron 安裝包體積太大，所以 JieOne 轉到 Tauri，降低安裝包大小，也讓啟動更輕。
 - Windows 版本先發布，以便盡快交付穩定安裝包並完成測試。
 - Apple Developer 簽署與公證完成後，macOS 已在 v2.0.1 正式提供同時支援 Apple Silicon 與 Intel Mac 的 Universal DMG。
 
@@ -105,10 +105,10 @@ npm run dev
 
 ```bash
 cd app
-npm run build:win         # → src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/LiteSnap_2.0.1_x64-setup.exe
-npm run build:mac         # → src-tauri/target/release/bundle/macos/LiteSnap.app
+npm run build:win         # → src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/JieOne_2.0.1_x64-setup.exe
+npm run build:mac         # → src-tauri/target/release/bundle/macos/JieOne.app
 npx tauri build --bundles dmg --target universal-apple-darwin
-                          # → src-tauri/target/universal-apple-darwin/release/bundle/dmg/LiteSnap_2.0.1_universal.dmg
+                          # → src-tauri/target/universal-apple-darwin/release/bundle/dmg/JieOne_2.0.1_universal.dmg
 ```
 
 ## 授權條款

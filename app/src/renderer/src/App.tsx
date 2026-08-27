@@ -12,7 +12,7 @@ function App(): React.JSX.Element {
   const [language, setLanguage] = useState<Language>('en')
 
   useEffect(() => {
-    document.title = 'LiteSnap'
+    document.title = 'JieOne'
   }, [])
 
   useEffect(() => {

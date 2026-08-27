@@ -159,11 +159,13 @@ struct ScrollResult {
 }
 
 fn settings_path() -> PathBuf {
-    // Electron's `app.getPath("userData")` used this location. Keeping it
-    // makes the Tauri migration retain the user's language and shortcut.
     BaseDirs::new()
-        .map(|dirs| dirs.config_dir().join("LiteSnap").join("settings.json"))
+        .map(|dirs| dirs.config_dir().join("JieOne").join("settings.json"))
         .unwrap_or_else(|| PathBuf::from("settings.json"))
+}
+
+fn legacy_settings_path() -> Option<PathBuf> {
+    BaseDirs::new().map(|dirs| dirs.config_dir().join("LiteSnap").join("settings.json"))
 }
 
 fn default_shortcut() -> &'static str {
@@ -211,8 +213,18 @@ fn tauri_shortcut(value: &str) -> String {
 }
 
 fn load_settings() -> AppSettings {
-    let Ok(data) = fs::read_to_string(settings_path()) else {
-        return AppSettings::default();
+    let path = settings_path();
+    let (data, migrated) = match fs::read_to_string(&path) {
+        Ok(data) => (data, false),
+        Err(_) => {
+            let Some(legacy_path) = legacy_settings_path() else {
+                return AppSettings::default();
+            };
+            let Ok(data) = fs::read_to_string(legacy_path) else {
+                return AppSettings::default();
+            };
+            (data, true)
+        }
     };
     let Ok(mut settings) = serde_json::from_str::<AppSettings>(&data) else {
         return AppSettings::default();
@@ -223,6 +235,9 @@ fn load_settings() -> AppSettings {
     settings.capture_shortcut = normalize_shortcut(&settings.capture_shortcut);
     if !is_valid_shortcut(&settings.capture_shortcut) {
         settings.capture_shortcut = default_shortcut().into();
+    }
+    if migrated {
+        let _ = persist_settings(&settings);
     }
     settings
 }
@@ -446,7 +461,7 @@ fn capture_region_image(app: &AppHandle, rect: Rect) -> Result<RgbaImage, String
 
 fn build_overlay_window(app: &AppHandle, width: f64, height: f64) -> Result<(), String> {
     WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("index.html".into()))
-        .title("LiteSnap")
+        .title("JieOne")
         .inner_size(width, height)
         .decorations(false)
         .transparent(true)
@@ -687,7 +702,7 @@ fn build_pin_window(
     height: f64,
 ) -> Result<(), String> {
     WebviewWindowBuilder::new(app, "pin", WebviewUrl::App("index.html?view=pin".into()))
-        .title("LiteSnap")
+        .title("JieOne")
         .position(x, y)
         .inner_size(width, height)
         .min_inner_size(60.0, 60.0)
@@ -739,12 +754,12 @@ fn ensure_screen_permission(app: &AppHandle) -> Result<(), StartCaptureError> {
 }
 
 fn show_capture_error(app: &AppHandle, detail: &str) {
-    eprintln!("LiteSnap capture failed: {detail}");
+    eprintln!("JieOne capture failed: {detail}");
     let _ = app.emit("capture-error", detail.to_string());
     let _ = rfd::MessageDialog::new()
         .set_title("Cannot capture screen")
         .set_description(format!(
-            "LiteSnap could not capture the screen. Check Screen Recording permission, fully quit LiteSnap, and open it again.\n\n{detail}"
+            "JieOne could not capture the screen. Check Screen Recording permission, fully quit JieOne, and open it again.\n\n{detail}"
         ))
         .set_level(rfd::MessageLevel::Error)
         .show();
@@ -754,7 +769,7 @@ fn show_screen_permission_help() {
     let _ = rfd::MessageDialog::new()
         .set_title("Screen Recording permission required")
         .set_description(
-            "Enable LiteSnap in System Settings > Privacy & Security > Screen Recording. Then fully quit LiteSnap and open it again.",
+            "Enable JieOne in System Settings > Privacy & Security > Screen Recording. Then fully quit JieOne and open it again.",
         )
         .set_level(rfd::MessageLevel::Info)
         .show();
@@ -765,9 +780,9 @@ fn show_screen_permission_help() {
 
 fn show_screen_permission_restart() {
     let _ = rfd::MessageDialog::new()
-        .set_title("Restart LiteSnap")
+        .set_title("Restart JieOne")
         .set_description(
-            "Screen Recording permission is enabled. Fully quit LiteSnap from its tray menu, then open it again before taking a screenshot.",
+            "Screen Recording permission is enabled. Fully quit JieOne from its tray menu, then open it again before taking a screenshot.",
         )
         .set_level(rfd::MessageLevel::Info)
         .show();
@@ -807,7 +822,7 @@ fn handle_start_capture(app: &AppHandle) {
     }
     // A shortcut can arrive while the previous WebView is still painting
     // (most visible on the first Windows launch). Hide it before the native
-    // capture so LiteSnap never captures its own transparent surface together
+    // capture so JieOne never captures its own transparent surface together
     // with the desktop.
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.hide();
@@ -878,7 +893,7 @@ fn open_shortcut_window(app: &AppHandle) -> Result<(), String> {
         "shortcut",
         WebviewUrl::App("index.html?view=shortcut".into()),
     )
-    .title("LiteSnap")
+    .title("JieOne")
     .inner_size(400.0, 272.0)
     .resizable(false)
     .minimizable(false)
@@ -971,7 +986,7 @@ fn prewarm_scroll_control(app: &AppHandle) {
         "scroll-control",
         WebviewUrl::App("index.html?view=scroll-capture".into()),
     )
-    .title("LiteSnap")
+    .title("JieOne")
     .inner_size(300.0, 420.0)
     .decorations(false)
     .transparent(false)
@@ -1072,7 +1087,7 @@ fn open_scroll_control(app: &AppHandle, selection: Rect) -> Result<(), String> {
         "scroll-control",
         WebviewUrl::App("index.html?view=scroll-capture".into()),
     )
-    .title("LiteSnap")
+    .title("JieOne")
     .position(x, y)
     .inner_size(width, height)
     .decorations(false)
@@ -1682,7 +1697,7 @@ fn save_image(app: AppHandle, data: Vec<u8>) -> Result<bool, String> {
         .as_millis();
     let Some(path) = rfd::FileDialog::new()
         .set_title("Save Screenshot")
-        .set_file_name(format!("LiteSnap-{stamp}.png"))
+        .set_file_name(format!("JieOne-{stamp}.png"))
         .add_filter("PNG Image", &["png"])
         .save_file()
     else {
@@ -2145,9 +2160,9 @@ pub fn run() {
                 .icon(tray_icon)
                 // The bundled icon is full-colour and fully opaque. Marking it
                 // as a macOS template turns its entire canvas into a solid
-                // square instead of drawing the LiteSnap glyph.
+                // square instead of drawing the JieOne glyph.
                 .icon_as_template(false)
-                .tooltip("LiteSnap")
+                .tooltip("JieOne")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id().as_ref() {
@@ -2188,7 +2203,7 @@ pub fn run() {
             }
 
             let shortcut = app.state::<AppState>().settings.lock().unwrap().capture_shortcut.clone();
-            eprintln!("LiteSnap capture shortcut: {shortcut}");
+            eprintln!("JieOne capture shortcut: {shortcut}");
             if let Err(error) = register_shortcut(app.handle(), &shortcut) {
                 eprintln!("Unable to register {shortcut}: {error}");
                 if shortcut != default_shortcut() {
@@ -2203,7 +2218,7 @@ pub fn run() {
                     } else {
                         let _ = rfd::MessageDialog::new()
                             .set_title("Shortcut unavailable")
-                            .set_description("LiteSnap could not register the capture shortcut. Choose another shortcut from the tray menu.")
+                            .set_description("JieOne could not register the capture shortcut. Choose another shortcut from the tray menu.")
                             .set_level(rfd::MessageLevel::Warning)
                             .show();
                         let _ = open_shortcut_window(app.handle());
@@ -2211,14 +2226,14 @@ pub fn run() {
                 } else {
                     let _ = rfd::MessageDialog::new()
                         .set_title("Shortcut unavailable")
-                        .set_description("LiteSnap could not register the capture shortcut. Choose another shortcut from the tray menu.")
+                        .set_description("JieOne could not register the capture shortcut. Choose another shortcut from the tray menu.")
                         .set_level(rfd::MessageLevel::Warning)
                         .show();
                     let _ = open_shortcut_window(app.handle());
                 }
             }
             match register_history_shortcut(app.handle()) {
-                Ok(()) => eprintln!("LiteSnap clipboard history shortcut: {HISTORY_SHORTCUT}"),
+                Ok(()) => eprintln!("JieOne clipboard history shortcut: {HISTORY_SHORTCUT}"),
                 Err(error) => eprintln!("Clipboard history shortcut unavailable: {error}"),
             }
             Ok(())
@@ -2255,7 +2270,7 @@ pub fn run() {
             quick_paste,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building LiteSnap");
+        .expect("error while building JieOne");
 
     app.run(|app, event| match event {
         tauri::RunEvent::ExitRequested {

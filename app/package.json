@@ -1,11 +1,11 @@
 {
-  "name": "app",
+  "name": "jieone",
   "version": "2.0.1",
-  "description": "A fast native screenshot utility built with Tauri, React and TypeScript",
-  "author": "example.com",
-  "homepage": "https://github.com/litesnap/litesnap",
+  "description": "JieOne cross-platform screenshot and clipboard productivity tool",
+  "author": "JieOne",
+  "homepage": "https://github.com/suisuib1/jietu",
   "napi": {
-    "name": "litesnap-native"
+    "name": "jieone-native"
   },
   "scripts": {
     "format": "prettier --write .",

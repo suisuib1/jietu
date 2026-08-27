@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "LiteSnap",
+  "productName": "JieOne",
   "version": "2.0.1",
-  "identifier": "com.huibinglin.litesnap",
+  "identifier": "com.suisui.jieone",
   "build": {
     "beforeDevCommand": "npm run dev:web",
     "devUrl": "http://localhost:5173",
