@@ -93,6 +93,11 @@ export const zh: Messages = {
     html: 'HTML',
     image: '截图',
     files: '文件',
-    sourceApplication: '来源应用'
+    sourceApplication: '来源应用',
+    themePickerLabel: '剪贴板历史主题',
+    creamHanddrawn: '奶油手绘',
+    bunnyCloud: '兔兔云朵',
+    link: '链接',
+    screenshot: '截图'
   }
 }

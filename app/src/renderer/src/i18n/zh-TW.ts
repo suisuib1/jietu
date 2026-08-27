@@ -93,6 +93,11 @@ export const zhTW: Messages = {
     html: 'HTML',
     image: '截圖',
     files: '檔案',
-    sourceApplication: '來源應用程式'
+    sourceApplication: '來源應用程式',
+    themePickerLabel: '剪貼簿記錄主題',
+    creamHanddrawn: '奶油手繪',
+    bunnyCloud: '兔兔雲朵',
+    link: '連結',
+    screenshot: '截圖'
   }
 }

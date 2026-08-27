@@ -47,6 +47,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 const DEFAULT_SHORTCUT_MAC: &str = "Alt+A";
 const DEFAULT_SHORTCUT_WINDOWS: &str = "Control+Shift+A";
+const DEFAULT_THEME: &str = "cream-handdrawn";
 const HISTORY_SHORTCUT: &str = "Alt+V";
 const HISTORY_WINDOW_LABEL: &str = "clipboard-history";
 const HISTORY_WINDOW_WIDTH: f64 = 1080.0;
@@ -60,6 +61,8 @@ struct AppSettings {
     capture_shortcut: String,
     #[serde(default = "default_launch_at_startup")]
     launch_at_startup: bool,
+    #[serde(default = "default_theme")]
+    theme: String,
 }
 
 impl Default for AppSettings {
@@ -72,12 +75,24 @@ impl Default for AppSettings {
                 DEFAULT_SHORTCUT_MAC.into()
             },
             launch_at_startup: default_launch_at_startup(),
+            theme: default_theme(),
         }
     }
 }
 
 fn default_launch_at_startup() -> bool {
     true
+}
+
+fn default_theme() -> String {
+    DEFAULT_THEME.into()
+}
+
+fn normalize_theme(value: &str) -> String {
+    match value {
+        "cream-handdrawn" | "bunny-cloud" => value.into(),
+        _ => default_theme(),
+    }
 }
 
 #[derive(Clone)]
@@ -236,6 +251,7 @@ fn load_settings() -> AppSettings {
     if !is_valid_shortcut(&settings.capture_shortcut) {
         settings.capture_shortcut = default_shortcut().into();
     }
+    settings.theme = normalize_theme(&settings.theme);
     if migrated {
         let _ = persist_settings(&settings);
     }
@@ -1873,6 +1889,19 @@ fn set_language(app: AppHandle, language: String) -> AppSettings {
 }
 
 #[tauri::command]
+fn set_theme(app: AppHandle, theme: String) -> AppSettings {
+    let state = app.state::<AppState>();
+    let settings = {
+        let mut settings = state.settings.lock().unwrap();
+        settings.theme = normalize_theme(&theme);
+        let _ = persist_settings(&settings);
+        settings.clone()
+    };
+    let _ = app.emit("settings-changed", settings.clone());
+    settings
+}
+
+#[tauri::command]
 fn set_capture_shortcut(app: AppHandle, shortcut: String) -> SetShortcutResult {
     let normalized = normalize_shortcut(shortcut.trim());
     let state = app.state::<AppState>();
@@ -2255,6 +2284,7 @@ pub fn run() {
             open_url,
             get_settings,
             set_language,
+            set_theme,
             set_capture_shortcut,
             begin_shortcut_recording,
             end_shortcut_recording,
@@ -2294,6 +2324,23 @@ pub fn run() {
 mod tests {
     use super::*;
     use image::imageops;
+
+    #[test]
+    fn theme_values_normalize_to_supported_ids() {
+        assert_eq!(normalize_theme("cream-handdrawn"), "cream-handdrawn");
+        assert_eq!(normalize_theme("bunny-cloud"), "bunny-cloud");
+        assert_eq!(normalize_theme("legacy-theme"), DEFAULT_THEME);
+        assert_eq!(normalize_theme(""), DEFAULT_THEME);
+    }
+
+    #[test]
+    fn legacy_settings_without_theme_use_default_theme() {
+        let settings: AppSettings = serde_json::from_str(
+            r#"{"language":"en","captureShortcut":"Alt+Shift+4","launchAtStartup":true}"#,
+        )
+        .expect("legacy settings should deserialize");
+        assert_eq!(settings.theme, DEFAULT_THEME);
+    }
 
     fn test_document(width: u32, height: u32) -> RgbaImage {
         RgbaImage::from_fn(width, height, |x, y| {

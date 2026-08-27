@@ -10,10 +10,13 @@ export interface SelectionRect {
 
 export type Language = 'en' | 'zh' | 'zh-TW'
 
+export type ClipboardHistoryTheme = 'cream-handdrawn' | 'bunny-cloud'
+
 export interface AppSettings {
   language: Language
   captureShortcut: string
   launchAtStartup: boolean
+  theme: ClipboardHistoryTheme
 }
 
 export interface SetShortcutResult {
@@ -104,6 +107,7 @@ export interface Api {
   openUrl: (url: string) => Promise<boolean>
   getSettings: () => Promise<AppSettings>
   setLanguage: (language: Language) => Promise<AppSettings>
+  setTheme: (theme: ClipboardHistoryTheme) => Promise<AppSettings>
   setCaptureShortcut: (shortcut: string) => Promise<SetShortcutResult>
   beginShortcutRecording: () => Promise<void>
   endShortcutRecording: () => Promise<void>
@@ -198,6 +202,7 @@ export const api: Api = {
   openUrl: (url) => invoke('open_url', { url }),
   getSettings: () => invoke('get_settings'),
   setLanguage: (language) => invoke('set_language', { language }),
+  setTheme: (theme) => invoke('set_theme', { theme }),
   setCaptureShortcut: (shortcut) => invoke('set_capture_shortcut', { shortcut }),
   beginShortcutRecording: () => invoke('begin_shortcut_recording'),
   endShortcutRecording: () => invoke('end_shortcut_recording'),

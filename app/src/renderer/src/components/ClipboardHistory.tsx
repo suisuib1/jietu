@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import type { ClipboardHistoryDetail, ClipboardHistorySummary, ClipboardKind } from '../api'
+import type {
+  ClipboardHistoryDetail,
+  ClipboardHistorySummary,
+  ClipboardHistoryTheme,
+  ClipboardKind
+} from '../api'
 import { pasteShortcutLabel } from '../platformPresentation'
 import {
   adjacentSelection,
@@ -7,6 +12,9 @@ import {
   type HistoryError
 } from '../clipboardHistoryStore'
 import { useI18n } from '../i18n'
+import { ThemeDecorations } from './ThemeDecorations'
+import { ThemePicker } from './ThemePicker'
+import { useThemeStore } from '../themeStore'
 import '../assets/clipboardHistory.css'
 
 const PAGE_SIZE = 50
@@ -19,6 +27,14 @@ function errorState(error: unknown): HistoryError {
 
 function dataUrl(dataBase64: string): string {
   return `data:image/png;base64,${dataBase64}`
+}
+
+function isLikelyUrl(value: string): boolean {
+  return /^(?:https?:\/\/|www\.)\S+$/i.test(value.trim())
+}
+
+function isJieOneScreenshotSource(value?: string): boolean {
+  return /(?:^|[\\/])jieone\.exe$/i.test(value ?? '')
 }
 
 function SearchIcon(): React.JSX.Element {
@@ -209,11 +225,28 @@ function ClipboardHistory(): React.JSX.Element {
   const feedback = useClipboardHistoryStore((state) => state.feedback)
   const details = useClipboardHistoryStore((state) => state.details)
   const imagePreviews = useClipboardHistoryStore((state) => state.imagePreviews)
+  const theme = useThemeStore((state) => state.theme)
+  const themeSaving = useThemeStore((state) => state.saving)
+  const hydrateTheme = useThemeStore((state) => state.hydrate)
+  const syncTheme = useThemeStore((state) => state.syncFromSettings)
+  const setTheme = useThemeStore((state) => state.setTheme)
   const searchRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef(new Map<number, HTMLDivElement>())
   const requestGeneration = useRef(0)
+
+  useEffect(() => {
+    void hydrateTheme()
+    return window.api.onSettingsChanged(syncTheme)
+  }, [hydrateTheme, syncTheme])
+
+  const handleThemeChange = useCallback(
+    (nextTheme: ClipboardHistoryTheme): void => {
+      void setTheme(nextTheme).catch(() => undefined)
+    },
+    [setTheme]
+  )
 
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedId) ?? null,
@@ -436,6 +469,15 @@ function ClipboardHistory(): React.JSX.Element {
     [history]
   )
 
+  const displayKindLabel = useCallback(
+    (kind: ClipboardKind, previewText = '', sourceApplication?: string): string => {
+      if (kind === 'text' && isLikelyUrl(previewText)) return history.link
+      if (kind === 'image' && isJieOneScreenshotSource(sourceApplication)) return history.screenshot
+      return kindLabel(kind)
+    },
+    [history, kindLabel]
+  )
+
   const relativeTime = useCallback(
     (timestamp: number): string => {
       const elapsed = timestamp - Date.now()
@@ -475,7 +517,9 @@ function ClipboardHistory(): React.JSX.Element {
     }
     return (
       <pre className="history-preview__text">
-        {detail.textContent || selectedItem.previewText || kindLabel(detail.kind)}
+        {detail.textContent ||
+          selectedItem.previewText ||
+          displayKindLabel(detail.kind, selectedItem.previewText, detail.sourceApplication)}
       </pre>
     )
   }
@@ -491,7 +535,8 @@ function ClipboardHistory(): React.JSX.Element {
         : null
 
   return (
-    <main className="clipboard-history">
+    <main className="clipboard-history" data-theme={theme}>
+      <ThemeDecorations theme={theme} />
       <header className="history-header">
         <div className="history-header__title">{history.title}</div>
         <label className="history-search">
@@ -510,6 +555,7 @@ function ClipboardHistory(): React.JSX.Element {
             {navigator.userAgent.toLowerCase().includes('mac') ? '⌘ F' : 'Ctrl F'}
           </kbd>
         </label>
+        <ThemePicker theme={theme} saving={themeSaving} onChange={handleThemeChange} />
       </header>
       <div className="history-content">
         <section className="history-list" aria-label={history.title}>
@@ -538,12 +584,12 @@ function ClipboardHistory(): React.JSX.Element {
                   <span className="history-row__body">
                     <span className="history-row__topline">
                       <span className={`history-row__kind history-row__kind--${item.kind}`}>
-                        {kindLabel(item.kind)}
+                        {displayKindLabel(item.kind, item.previewText, item.sourceApplication)}
                       </span>
                       <time>{relativeTime(item.lastUsedAtMs)}</time>
                     </span>
                     <span className="history-row__preview">
-                      {item.previewText || kindLabel(item.kind)}
+                      {item.previewText || displayKindLabel(item.kind, '', item.sourceApplication)}
                       {item.kind === 'files' && item.fileCount > 1 ? ` +${item.fileCount - 1}` : ''}
                     </span>
                     {item.sourceApplication && (
@@ -572,13 +618,25 @@ function ClipboardHistory(): React.JSX.Element {
         <section className="history-preview">
           <header className="history-preview__header">
             <div>
-              <span>{selectedItem ? kindLabel(selectedItem.kind) : history.preview}</span>
+              <span>
+                {selectedItem
+                  ? displayKindLabel(
+                      selectedItem.kind,
+                      selectedItem.previewText,
+                      selectedItem.sourceApplication
+                    )
+                  : history.preview}
+              </span>
               {selectedItem && (
                 <small
                   className={`history-preview__badge history-preview__badge--${selectedItem.kind}`}
                 >
                   <TypeIcon kind={selectedItem.kind} />
-                  {kindLabel(selectedItem.kind)}
+                  {displayKindLabel(
+                    selectedItem.kind,
+                    selectedItem.previewText,
+                    selectedItem.sourceApplication
+                  )}
                 </small>
               )}
             </div>

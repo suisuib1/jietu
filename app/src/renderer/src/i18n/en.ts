@@ -92,6 +92,11 @@ export interface Messages {
     image: string
     files: string
     sourceApplication: string
+    themePickerLabel: string
+    creamHanddrawn: string
+    bunnyCloud: string
+    link: string
+    screenshot: string
   }
 }
 
@@ -188,6 +193,11 @@ export const en: Messages = {
     html: 'HTML',
     image: 'Screenshot',
     files: 'Files',
-    sourceApplication: 'Source application'
+    sourceApplication: 'Source application',
+    themePickerLabel: 'Clipboard History theme',
+    creamHanddrawn: 'Cream handdrawn',
+    bunnyCloud: 'Bunny cloud',
+    link: 'Link',
+    screenshot: 'Screenshot'
   }
 }
